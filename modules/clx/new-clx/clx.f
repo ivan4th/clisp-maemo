@@ -14,6 +14,7 @@
 // - Save subr_self during some calls in xlib:change-property.
 // - Fix some obvious typos in `font_char_info'.
 // - Call XFree() when done with the result of XGetAtomName().
+// - Improved error handling in `get_font_info_and_display'.
 //
 // Revision 1.20  1999-04-04  bruno
 // - Modifications for UNICODE.
@@ -32,8 +33,8 @@
 //
 // $Id$
 // $Log$
-// Revision 1.8  1999/05/31 22:45:22  haible
-// Avoid memory leaks.
+// Revision 1.9  1999/05/31 22:46:25  haible
+// Avoid a crash when calling the hello-world program with a nonexistent font.
 //
 // Revision 1.18  1997/06/12  00:23:35  gilbert
 // - nothing special
@@ -1228,8 +1229,9 @@ XFontStruct *get_font_info_and_display (object obj, Display **dpyf)
       if (!(fpointerp (value1) && fp_validp (TheFpointer(value1))))
 	{
 	  // Raise an error message.
+	  pushSTACK (STACK_0);
 	  pushSTACK (TheSubr (subr_self)->name);
-	  fehler (error, "~: Wanted to refer to a dead font.");	    
+	  fehler (error, "~: Wanted to refer to a dead font: ~");	    
 	}
 
       info = TheFpointer(value1)->fp_pointer;		// 
@@ -1238,17 +1240,21 @@ XFontStruct *get_font_info_and_display (object obj, Display **dpyf)
 	  // We have no font information already, so go and ask the server for it.
 
 	  pushSTACK (value1); 				// but first save what we found.
-
 	  
 	  font = get_font_and_display (STACK_1, &dpy);
 	  begin_call ();
-	  info = XQueryFont (dpy, font); 		// FIXME - What shall we do, if we get nothing appropriate?
+	  info = XQueryFont (dpy, font);
 	  end_call ();
+
+          if (!info)
+            {
+              pushSTACK (STACK_1);
+              fehler (error, "Nonexistent font: ~");
+            }
 
 	  if (dpyf) *dpyf = dpy;
 	  
-if  (!fpointerp (STACK_0))
-  NOTREACHED;
+          ASSERT (fpointerp (STACK_0));
 	  
 	  TheFpointer (STACK_0)->fp_pointer = info;	// Store it in the foreign pointer
 	  skipSTACK (1);
