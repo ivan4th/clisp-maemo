@@ -9,6 +9,9 @@
 //
 // --------------------------------------------------------------------------------
 //
+// Revision 1.21  1999-05-30  bruno
+// - Add missing begin_callback() in `xlib_io_error_handler'.
+//
 // Revision 1.20  1999-04-04  bruno
 // - Modifications for UNICODE.
 //
@@ -26,8 +29,8 @@
 //
 // $Id$
 // $Log$
-// Revision 1.4  1999/04/05 21:28:59  haible
-// Update CLX for Unicode. At least it compiles again now, don't know how it runs.
+// Revision 1.5  1999/05/31 22:42:54  haible
+// Fix a bug which could cause a crash.
 //
 // Revision 1.18  1997/06/12  00:23:35  gilbert
 // - nothing special
@@ -8742,6 +8745,8 @@ int xlib_error_handler (Display *display, XErrorEvent *event)
 
 int xlib_io_error_handler (Display *display)
 {
+  begin_callback ();
+
   pushSTACK (find_display (display));
   fehler (error, "IO Error on display ~.");
 }
