@@ -25,8 +25,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.7  2002/06/13 22:28:33  sds
- * grand type renaming: * --> *_t
+ * Revision 1.8  2002/06/14 15:42:54  sds
+ * grand type renaming continues
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -875,13 +875,13 @@ void care_about_packages (FILE *sink)
            "object_initdata_t module__%s_PRELOAD__object_tab_initdata[1] = {0}; \n"
            "uintC module__%s_PRELOAD__object_tab_size = 0;\n"
            "uintC module__%s_PRELOAD__subr_tab_size = 0;\n"
-           "subr_ module__%s_PRELOAD__subr_tab [1] = {0};\n"
+           "subr_t module__%s_PRELOAD__subr_tab [1] = {0};\n"
            "subr_initdata_t module__%s_PRELOAD__subr_tab_initdata[1] = {0};\n"
-           "void module__%s_PRELOAD__init_function_2 (module_ *module) { }\n",
+           "void module__%s_PRELOAD__init_function_2 (module_t *module) { }\n",
            module_name, module_name, module_name,
            module_name, module_name, module_name, module_name);
 
-  fprintf (sink, "void module__%s_PRELOAD__init_function_1 (module_ *module)\n"
+  fprintf (sink, "void module__%s_PRELOAD__init_function_1 (module_t *module)\n"
                  "{\n"
                  "  module_%s_PRELOAD_init_p = 1;\n  \n",
                  module_name, module_name);
@@ -931,9 +931,12 @@ int main (int argc, char **argv)
     FILE *out = fopen (d_fname, "w");
     list *q;
 
+    if (NULL == in) { perror(e_fname); exit(1); }
+    if (NULL == out) { perror(d_fname); exit(1); }
+
     conv (in, out);
     fprintf (out, "uintC module__%s__subr_tab_size = %d;\n", module_name, length (subr_tab));
-    fprintf (out, "subr_ module__%s__subr_tab [%d] = \n", module_name, length (subr_tab));
+    fprintf (out, "subr_t module__%s__subr_tab [%d] = \n", module_name, length (subr_tab));
     fprintf (out, "{\n");
     for (q = subr_tab; q; q = q->cdr)
       fprintf (out, "    %s\n", q->car);
@@ -949,7 +952,7 @@ int main (int argc, char **argv)
 #if EMIT_PRELOAD
     fprintf (out, "static int module_%s_PRELOAD_init_p = 0;\n", module_name);
 #endif
-    fprintf (out, "void module__%s__init_function_1 (module_ *module)\n", module_name);
+    fprintf (out, "void module__%s__init_function_1 (module_t *module)\n", module_name);
     fprintf (out, "{\n");
 
 #if 0 && EMIT_PRELOAD
