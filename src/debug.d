@@ -110,7 +110,7 @@ local maygc Values read_form(void)
    (loop
      (let ((raw (terminal-raw istream nil)))
        (when (interactive-stream-p istream)
-         (terpri ostream)
+         (fresh-line ostream)
          (write-string prompt ostream)
          (force-output ostream))
        (let* ((eof-value "EOF")
@@ -141,7 +141,7 @@ local maygc Values read_form(void)
   if (ilisp_mode || interactive_stream_p(STACK_4)) {
     /* interactive input-stream -> prompt output: */
    #if 0
-    terpri(&STACK_5); /* (TERPRI ostream) */
+    fresh_line(&STACK_5); /* (FRESH-LINE ostream) */
    #else
     /* the same, but avoiding infinite recursion
      (let ((*recurse-count-standard-output*
@@ -155,7 +155,7 @@ local maygc Values read_form(void)
              (makunbound (quote *debug-io*))
              (symbol-stream (quote *debug-io*) :io))
            (symbol-stream (quote *standard-output*) :output)))
-       (terpri *standard-output*)) */
+       (fresh-line *standard-output*)) */
     /* (incf sys::*recurse-count-standard-output*) */
     dynamic_bind(S(recurse_count_standard_output),
                  fixnum_inc(Symbol_value(S(recurse_count_standard_output)),1));
@@ -181,7 +181,7 @@ local maygc Values read_form(void)
       STACK_(5+3+3) = var_stream(S(standard_output),strmflags_wr_ch_B); /* ostream := *STANDARD-OUTPUT* */
       dynamic_unbind(S(recurse_count_debug_io));
     }
-    terpri(&STACK_(5+3)); /* (TERPRI ostream) */
+    fresh_line(&STACK_(5+3)); /* (FRESH-LINE ostream) */
     dynamic_unbind(S(recurse_count_standard_output));
    #endif
     write_string(&STACK_5,STACK_3); /* (WRITE-STRING prompt ostream) */
@@ -379,7 +379,8 @@ LISPFUN(read_eval_print,seclass_default,1,1,norest,nokey,0,NIL)
                    ((atom L))
                  (write-string " ;" ostream)
                  (terpri ostream)
-                 (write (car L) ostream)))))
+                 (write (car L) ostream)))
+             (elastic-newline ostream)))
          nil)))) */
 {
   read_form();                /* read form */
@@ -440,6 +441,7 @@ LISPFUN(read_eval_print,seclass_default,1,1,norest,nokey,0,NIL)
     }
   }
  #endif
+  elastic_newline(&STACK_(1+2));
   skipSTACK(4);
   VALUES1(NIL);
 }
@@ -1136,10 +1138,11 @@ global gcv_object_t* top_of_back_trace_frame (const struct backtrace_t *bt) {
 
 local void print_back_trace (const gcv_object_t* stream_,
                              const struct backtrace_t *bt, int index) {
-  terpri(stream_);
   write_ascii_char(stream_,'<');
-  if (index >= 0) prin1(stream_,fixnum(index));
-  else write_ascii_char(stream_,'#');
+  if (index >= 0)
+    prin1(stream_,fixnum(index));
+  else
+    write_ascii_char(stream_,'#');
   write_ascii_char(stream_,'>');
   write_ascii_char(stream_,' ');
   prin1(stream_,bt->bt_function);
@@ -1158,7 +1161,7 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
 {
   if (!frame_p()) {
     /* no frame, normal LISP-object */
-    write_sstring(stream_,O(showstack_string_lisp_obj)); /* "¿- " */
+    write_sstring(stream_,O(showstack_string_lisp_obj)); /* "- " */
     var object obj = FRAME_(0);
    #if !defined(NO_symbolflags)
     switch (typecode(obj)) {  /* poss. remove symbol-flags */
@@ -1173,11 +1176,9 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
     var gcv_object_t* FRAME_top = topofframe(FRAME_(0)); /* top of frame */
     switch (framecode(FRAME_(0))) { /* according to frametype */
       case TRAPPED_APPLY_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("APPLY frame with breakpoint for call "));
         goto APPLY_frame;
       case APPLY_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("APPLY frame for call "));
        APPLY_frame:
         /* print function name and arguments: */
@@ -1195,23 +1196,20 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         write_ascii_char(stream_,')'); /* print ')' */
         break;
       case TRAPPED_EVAL_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("EVAL frame with breakpoint for form "));
         goto EVAL_frame;
       case EVAL_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("EVAL frame for form "));
       EVAL_frame:
         prin1(stream_,FRAME_(frame_form)); /* print form */
         break;
       case DYNBIND_frame_info: /* dynamic variable binding frames: */
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding variables (~ = dynamically):"));
         /* print bindings: */
         FRAME skipSTACKop 1;
         while (FRAME != FRAME_top) {
           /* print binding of Symbol FRAME_(0) to value FRAME_(1): */
-          write_sstring(stream_,O(showstack_string_bindung)); /* "¿  | " */
+          write_sstring(stream_,O(showstack_string_bindung)); /* "␤  | " */
           write_ascii_char(stream_,'~'); /* print '~' */
           write_ascii_char(stream_,' '); /* print ' ' */
           prin1(stream_,FRAME_(0));      /* print symbol */
@@ -1222,13 +1220,11 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         break;
      #ifdef HAVE_SAVED_REGISTERS
       case CALLBACK_frame_info: /* callback-register-frames: */
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("CALLBACK frame"));
         break;
      #endif
       /* variable- and function binding frames: */
       case VAR_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding variables "));
        #ifdef NO_symbolflags
         prin1(stream_,make_framepointer(FRAME)); /* print frame-pointer */
@@ -1239,7 +1235,7 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         while (FRAME != FRAME_top) {
           if (as_oint(FRAME_(varframe_binding_mark)) & wbit(active_bit_o)) {
             /* print binding of symbol FRAME_(1) to value FRAME_(2): */
-            write_sstring(stream_,O(showstack_string_bindung)); /* "¿  | " */
+            write_sstring(stream_,O(showstack_string_bindung)); /* "␤  | " */
             if (as_oint(FRAME_(varframe_binding_mark)) & wbit(dynam_bit_o))
               /* dynamic binding? */
               write_ascii_char(stream_,'~'); /* yes -> print '~' */
@@ -1256,7 +1252,6 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         goto VARFUN_frame;
        #endif
       case FUN_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding functions "));
         goto VARFUN_frame;
       VARFUN_frame:
@@ -1268,7 +1263,7 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         while (FRAME != FRAME_top) {
           if (as_oint(FRAME_(0)) & wbit(active_bit_o)) {
             /* print binding of symbol FRAME_(0) to value FRAME_(1): */
-            write_sstring(stream_,O(showstack_string_bindung)); /* "¿  | " */
+            write_sstring(stream_,O(showstack_string_bindung)); /* "␤  | " */
             if (as_oint(FRAME_(0)) & wbit(dynam_bit_o)) /* bindings dynamic? */
               write_ascii_char(stream_,'~'); /* yes -> print '~' */
             write_ascii_char(stream_,' ');   /* print ' ' */
@@ -1293,7 +1288,7 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
               var uintL count = floor(Svector_length(env),2); /* = n = number of bindings */
               var uintL index = 0;
               dotimesL(count,count, {
-                write_sstring(stream_,O(showstack_string_bindung)); /* "¿  | " */
+                write_sstring(stream_,O(showstack_string_bindung)); /* "␤  | " */
                 prin1(stream_,TheSvector(STACK_0)->data[index++]); /* print symbol */
                 write_sstring(stream_,O(showstack_string_zuord)); /* " <--> " */
                 prin1(stream_,TheSvector(STACK_0)->data[index++]); /* print symbol */
@@ -1305,7 +1300,6 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         break;
         /* compiled block/tagbody-frames: */
       case CBLOCK_CTAGBODY_frame_info:
-        terpri(stream_);
         if (simple_vector_p(Car(FRAME_(frame_ctag)))) {
           /* compiled tagbody-frames: */
           write_sstring(stream_,CLSTEXT("compiled tagbody frame for "));
@@ -1318,11 +1312,9 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         break;
         /* interpreted block-frames: */
       case IBLOCK_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("block frame "));
         goto IBLOCK_frame;
       case NESTED_IBLOCK_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("nested block frame "));
         goto IBLOCK_frame;
       IBLOCK_frame:
@@ -1333,11 +1325,9 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         goto NEXT_ENV;
         /* interpreted tagbody-frames: */
       case ITAGBODY_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("tagbody frame "));
         goto ITAGBODY_frame;
       case NESTED_ITAGBODY_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("nested tagbody frame "));
         goto ITAGBODY_frame;
       ITAGBODY_frame:
@@ -1348,7 +1338,7 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         FRAME skipSTACKop frame_bindings;
         while (FRAME != FRAME_top) {
           /* print binding of tag FRAME_(0) to body FRAME_(1): */
-          write_sstring(stream_,O(showstack_string_bindung)); /* "¿  | " */
+          write_sstring(stream_,O(showstack_string_bindung)); /* "␤  | " */
           prin1(stream_,FRAME_(0)); /* print tag */
           write_sstring(stream_,O(showstack_string_zuordtag)); /* " --> " */
           prin1(stream_,FRAME_(1)); /* print body */
@@ -1373,7 +1363,7 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
               }
               pushSTACK(Cdr(env));
               pushSTACK(Car(env));
-              write_sstring(stream_,O(showstack_string_bindung)); /* "¿  | " */
+              write_sstring(stream_,O(showstack_string_bindung)); /* "␤  | " */
               prin1(stream_,popSTACK());
               write_sstring(stream_,O(showstack_string_zuordtag)); /* " --> " */
               prin1(stream_,popSTACK());
@@ -1384,13 +1374,11 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         break;
       case CATCH_frame_info:
         /* catch-frames: */
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("catch frame for tag "));
         prin1(stream_,FRAME_(frame_tag)); /* tag */
         break;
       case HANDLER_frame_info:
         /* handler-frames: */
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("handler frame for conditions"));
         {
           var uintL m2 = Svector_length(Car(FRAME_(frame_handlers))); /* 2*m */
@@ -1404,66 +1392,57 @@ local maygc gcv_object_t* print_stackitem (const gcv_object_t* stream_,
         break;
       case UNWIND_PROTECT_frame_info:
         /* unwind-protect-frames: */
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("unwind-protect frame"));
         break;
       case DRIVER_frame_info:
         /* driver-frames: */
-        terpri(stream_);
-        terpri(stream_);
+        terpri(stream_); /* blank line */
         write_sstring(stream_,CLSTEXT("driver frame"));
         break;
         /* environment-frames: */
       case ENV1V_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_VENV_frame)); /* "¿  VAR_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_VENV_frame)); /* "␤  VAR_ENV <--> " */
         prin1(stream_,FRAME_(1));
         break;
       case ENV1F_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_FENV_frame)); /* "¿  FUN_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_FENV_frame)); /* "␤  FUN_ENV <--> " */
         prin1(stream_,FRAME_(1));
         break;
       case ENV1B_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_BENV_frame)); /* "¿  BLOCK_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_BENV_frame)); /* "␤  BLOCK_ENV <--> " */
         prin1(stream_,FRAME_(1));
         break;
       case ENV1G_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_GENV_frame)); /* "¿  GO_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_GENV_frame)); /* "␤  GO_ENV <--> " */
         prin1(stream_,FRAME_(1));
         break;
       case ENV1D_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_DENV_frame)); /* "¿  DECL_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_DENV_frame)); /* "␤  DECL_ENV <--> " */
         prin1(stream_,FRAME_(1));
         break;
       case ENV2VD_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_VENV_frame)); /* "¿  VAR_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_VENV_frame)); /* "␤  VAR_ENV <--> " */
         prin1(stream_,FRAME_(1));
-        write_sstring(stream_,O(showstack_string_DENV_frame)); /* "¿  DECL_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_DENV_frame)); /* "␤  DECL_ENV <--> " */
         prin1(stream_,FRAME_(2));
         break;
       case ENV5_frame_info:
-        terpri(stream_);
         write_sstring(stream_,CLSTEXT("frame binding environments"));
-        write_sstring(stream_,O(showstack_string_VENV_frame)); /* "¿  VAR_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_VENV_frame)); /* "␤  VAR_ENV <--> " */
         prin1(stream_,FRAME_(1));
-        write_sstring(stream_,O(showstack_string_FENV_frame)); /* "¿  FUN_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_FENV_frame)); /* "␤  FUN_ENV <--> " */
         prin1(stream_,FRAME_(2));
-        write_sstring(stream_,O(showstack_string_BENV_frame)); /* "¿  BLOCK_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_BENV_frame)); /* "␤  BLOCK_ENV <--> " */
         prin1(stream_,FRAME_(3));
-        write_sstring(stream_,O(showstack_string_GENV_frame)); /* "¿  GO_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_GENV_frame)); /* "␤  GO_ENV <--> " */
         prin1(stream_,FRAME_(4));
-        write_sstring(stream_,O(showstack_string_DENV_frame)); /* "¿  DECL_ENV <--> " */
+        write_sstring(stream_,O(showstack_string_DENV_frame)); /* "␤  DECL_ENV <--> " */
         prin1(stream_,FRAME_(5));
         break;
       default:
@@ -1479,13 +1458,17 @@ LISPFUNN(describe_frame,2)
      stackitem, that the pointer points to. */
   var gcv_object_t* FRAME = test_framepointer_arg(); /* pointer in the stack */
   STACK_0 = check_stream(STACK_0);
+  fresh_line(&STACK_0);
   {
     var p_backtrace_t bt = back_trace;
     unwind_back_trace(bt,FRAME);
-    if (top_of_back_trace_frame(bt) == FRAME)
+    if (top_of_back_trace_frame(bt) == FRAME) {
       print_back_trace(&STACK_0,bt,0);
+      terpri(&STACK_0);
+    }
   }
   print_stackitem(&STACK_0,FRAME); /* print stack-item */
+  elastic_newline(&STACK_0);
   skipSTACK(1); VALUES0; /* no values */
 }
 
@@ -1504,8 +1487,10 @@ local inline maygc uintL show_stack (climb_fun_t frame_up_x, uintL frame_limit,
   var p_backtrace_t bt = back_trace;
   while (!eq(FRAME_(0),nullobj) /* nullobj = stack end */
          && (frame_limit==0 || count<frame_limit)) {
+    fresh_line(stream_);
     while (bt_beyond_stack_p(bt,FRAME)) {
       print_back_trace(stream_,bt,++count);
+      terpri(stream_);
       bt = bt->bt_next;
     }
     if (frame_up_x != NULL) {
@@ -1514,6 +1499,7 @@ local inline maygc uintL show_stack (climb_fun_t frame_up_x, uintL frame_limit,
       print_stackitem(stream_,FRAME = next_frame);
     } else
       FRAME = print_stackitem(stream_,FRAME);
+    elastic_newline(stream_);
   }
   skipSTACK(1); /* drop *STANDARD-OUTPUT* */
   return count;

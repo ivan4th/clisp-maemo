@@ -309,13 +309,15 @@
   (sys::make-preliminary
     (function cerror
       (lambda (continue-format-string error-format-string &rest args)
-        (terpri *error-output*)
+        (fresh-line *error-output*)
         (write-string "** - " *error-output*)
         (write-string (TEXT "Continuable Error") *error-output*)
         (terpri *error-output*)
         (apply #'format *error-output* error-format-string args)
-        (terpri *debug-io*)
+        (ext::elastic-newline *error-output*)
+        (fresh-line *debug-io*)
         (apply #'format *debug-io* continue-format-string args)
+        (ext::elastic-newline *debug-io*)
         nil))))
 
 (use-package '("COMMON-LISP" "CUSTOM") "EXT")
@@ -1436,10 +1438,11 @@
 (sys::%putd 'warn
   (sys::make-preliminary
     (function warn (lambda (format-string &rest args)
-      (terpri *error-output*)
+      (fresh-line *error-output*)
       (write-string (TEXT "WARNING:") *error-output*)
       (terpri *error-output*)
       (apply #'format *error-output* format-string args)
+      (elastic-newline *error-output*)
       nil))))
 (defun open-for-load (filename extra-file-types external-format
                       &aux stream (present-files t) obj path bad-file)
@@ -1984,13 +1987,13 @@
   (flet ((onedir (pathname)
            (let ((pathname-list (directory pathname :full t :circle t)))
              (if (every #'atom pathname-list)
-                 (format t "~{~%~A~}"
-                         (sort pathname-list #'string< :key #'namestring))
-                 (let ((date-format (date-format)))
-                   (dolist (l (sort pathname-list #'string< :key
-                                    #'(lambda (l) (namestring (first l)))))
-                     (format t "~%~A~40T~7D~52T~21<~@?~>"
-                             (first l) (fourth l) date-format (third l))))))))
+               (format t "~{~&~A~.~}"
+                       (sort pathname-list #'string< :key #'namestring))
+               (let ((date-format (date-format)))
+                 (dolist (l (sort pathname-list #'string<
+                                  :key #'(lambda (l) (namestring (first l)))))
+                   (format t "~&~A~40T~7D~52T~21<~@?~>~."
+                           (first l) (fourth l) date-format (third l))))))))
     (if (listp pathnames) (mapc #'onedir pathnames) (onedir pathnames)))
   (values))
 
@@ -2057,19 +2060,22 @@
     (apply *error-handler*
            (or continue-format-string t) error-format-string args)
     (progn
-      (terpri *error-output*)
+      (fresh-line *error-output*)
       (write-string "** - " *error-output*)
       (write-string (TEXT "Continuable Error") *error-output*)
       (terpri *error-output*)
       (apply #'format *error-output* error-format-string args)
-      (terpri *debug-io*)
+      (elastic-newline *error-output*)
+      (fresh-line *debug-io*)
       (if (interactive-stream-p *debug-io*)
         (progn
           (write-string (TEXT "If you continue (by typing 'continue'): ")
                         *debug-io*)
           (apply #'format *debug-io* continue-format-string args)
           (initial-break-driver t))
-        (apply #'format *debug-io* continue-format-string args)))))
+        (progn
+          (apply #'format *debug-io* continue-format-string args)
+          (elastic-newline *debug-io*))))))
 
 (LOAD "functions")              ; function objects
 
