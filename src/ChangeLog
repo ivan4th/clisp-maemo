@@ -1,3 +1,24 @@
+1999-03-10  Sam Steingold  <sds@gnu.org>
+
+	* ../configure: new option --export-syscalls.
+	* makemake.in: ditto.
+	* constsym.d, subr.d: added `RESOLVE-HOST-IPADDR', `FILE-STAT'
+	and `USER-DATA'.
+	* pathname.d: added `file_stat' and `user_data'.
+	* socket.d: added `resolve_host_ipaddr'.
+	* stream.d: added `stream_fd'.
+
+1999-03-09  Bruno Haible  <bruno@linuix.math.u-bordeaux.fr>
+
+        Make it possible to build clisp when neither libtermcap nor libncurses
+        is available.
+        * configure: Optionally pass/recommend --with-no-termcap-ncurses for
+          makemake.
+        * makemake.in (XCFLAGS): Optionally add -DNO_TERMCAP_NCURSES.
+        * lispbibl.d: If NO_TERMCAP_NCURSES is defined, don't define KEYBOARD
+          and SCREEN.
+        * spvw_sigwinch.d (update_linelength): Respect NO_TERMCAP_NCURSES.
+
 1999-03-09  Bruno Haible  <bruno@linuix.math.u-bordeaux.fr>
 
         * stream.d: Include <string.h> also in the case of NO_READLINE,
