@@ -25,9 +25,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.9  2002/07/29 20:00:45  sds
- * fixed bug #[ 552171 ]: failure with clx.e
- * (do_defun): terminate with '\0' after inserting '}'
+ * Revision 1.10  2002/12/07 02:05:12  sds
+ * (do_defun): terminate name on '('
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -622,7 +621,7 @@ char *do_defun (FILE *in, FILE *out, char *line)
   s = line;
   d = name;
   while ((*s) && isspace (*s)) { s++; }
-  while ((*s) && !isspace (*s)) { *(d++) = *(s++); }
+  while ((*s) && !isspace(*s) && (*s != '(')) { *(d++) = *(s++); }
   *d = 0;
   c_name = make_c_name (name);
 
