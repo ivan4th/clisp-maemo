@@ -25,8 +25,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.6  2000/10/23 12:57:24  haible
- * Convert all sources to UTF-8.
+ * Revision 1.7  2002/06/13 22:28:33  sds
+ * grand type renaming: * --> *_t
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -713,7 +713,7 @@ char *do_defun (FILE *in, FILE *out, char *line)
     static char subr [4096];
     static char sym [1024];
     sprintf (subr,
-             "{ (lisp_function)(&C_%s), nullobj,NIL,0, %s, %s, (uintB)subr_%s, (uintB)subr_%s, %s, },",
+             "{ (lisp_function_t)(&C_%s), nullobj,NIL,0, %s, %s, (uintB)subr_%s, (uintB)subr_%s, %s, },",
              c_name,
              arg[0], arg[1], arg[2], arg[3], arg[4]);
     sprintf (sym , "{ \"%s\", \"%s\", },", pack, sym_name);
@@ -872,11 +872,11 @@ void care_about_packages (FILE *sink)
   /* Now emit the preload module */
   fprintf (sink,
            "struct { object o_fake; } module__%s_PRELOAD__object_tab;\n"
-           "object_initdata module__%s_PRELOAD__object_tab_initdata[1] = {0}; \n"
+           "object_initdata_t module__%s_PRELOAD__object_tab_initdata[1] = {0}; \n"
            "uintC module__%s_PRELOAD__object_tab_size = 0;\n"
            "uintC module__%s_PRELOAD__subr_tab_size = 0;\n"
            "subr_ module__%s_PRELOAD__subr_tab [1] = {0};\n"
-           "subr_initdata module__%s_PRELOAD__subr_tab_initdata[1] = {0};\n"
+           "subr_initdata_t module__%s_PRELOAD__subr_tab_initdata[1] = {0};\n"
            "void module__%s_PRELOAD__init_function_2 (module_ *module) { }\n",
            module_name, module_name, module_name,
            module_name, module_name, module_name, module_name);
@@ -939,7 +939,7 @@ int main (int argc, char **argv)
       fprintf (out, "    %s\n", q->car);
     fprintf (out, "};\n");
 
-    fprintf (out, "subr_initdata module__%s__subr_tab_initdata[%d] =\n",
+    fprintf (out, "subr_initdata_t module__%s__subr_tab_initdata[%d] =\n",
              module_name, length (subr_tab));
     fprintf (out, "{\n");
     for (q = sym_tab; q; q = q->cdr)
@@ -979,7 +979,7 @@ int main (int argc, char **argv)
     for (q = object_tab; q; q = q->cdr)
       fprintf (out, "    %s\n", q->car);
     fprintf (out, "\n} module__%s__object_tab;\n", module_name);
-    fprintf (out, "object_initdata module__%s__object_tab_initdata[%d] = \n",
+    fprintf (out, "object_initdata_t module__%s__object_tab_initdata[%d] = \n",
              module_name, length (object_tab));
     fprintf (out, "{\n");
     for (q = object_init_tab; q; q = q->cdr)
