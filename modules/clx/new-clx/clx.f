@@ -40,10 +40,8 @@
 //
 // $Id$
 // $Log$
-// Revision 1.10  1999/06/07 09:33:04  haible
-// Store and use a font's encoding. Now correctly displays non-iso8859-1
-// characters provided the font is a linear 8-bit font and clisp knows its
-// encoding.
+// Revision 1.11  1999/06/21 10:06:15  haible
+// Use Unicode API on Win32.
 //
 // Revision 1.18  1997/06/12  00:23:35  gilbert
 // - nothing special
@@ -586,7 +584,7 @@ local int isa_struct_p (object type, object obj)
 // generic test for unbound values, NIL will be threaten as unbound.
 #define gunboundp(X) (eq (X,unbound) || eq (X,NIL))
 
-// with_string_0, make_string, string_to_asciz now need an encoding.
+// with_string_0, n_char_to_string, string_to_asciz now need an encoding.
 // Here are some predefined ones (only defined and only needed with UNICODE).
 #define pathname_encoding() (C_pathname_encoding(),value1)
   extern void C_pathname_encoding (void);
@@ -1317,6 +1315,7 @@ XFontStruct *get_font_info_and_display (object obj, object* fontf, Display **dpy
                         //   gb2312.80&gb8565.88-0
                         //   gost19768.74-1
                         //   is13194-devanagari
+                        //   iso10646-1
                         //   iso646.1991-irv
                         //   iso8859-1
                         //   iso8859-2
@@ -2658,7 +2657,7 @@ defun XLIB:DISPLAY-HOST (1)
   if (s == name)
     value1 = ascii_to_string ("localhost");
   else
-    value1 = make_string (name, s - name, misc_encoding ());
+    value1 = n_char_to_string (name, s - name, misc_encoding ());
 
   mv_count = 1;
 }
