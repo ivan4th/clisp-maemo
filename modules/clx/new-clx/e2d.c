@@ -22,8 +22,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.2  1998/08/09 14:35:38  haible
- * 1998-06-15-old-stdwin.diff
+ * Revision 1.3  1999/02/16 18:49:22  haible
+ * Add Unicode support.
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -869,9 +869,9 @@ void care_about_packages (FILE *sink)
 	         module_name, module_name);
   for (q = to_create; q; q = q->cdr)
     {
-      fprintf (sink, "  if (nullp (find_package (asciz_to_string (\"%s\"))))\n"
+      fprintf (sink, "  if (nullp (find_package (ascii_to_string (\"%s\"))))\n"
 	             "    {\n"
-	             "      pushSTACK (asciz_to_string (\"%s\"));\n"
+	             "      pushSTACK (ascii_to_string (\"%s\"));\n"
 	             "      funcall (L (make_package), 1);\n"
 	             "    }\n",
 	       q->car, q->car);
