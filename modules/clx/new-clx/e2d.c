@@ -25,8 +25,9 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.8  2002/06/14 15:42:54  sds
- * grand type renaming continues
+ * Revision 1.9  2002/07/29 20:00:45  sds
+ * fixed bug #[ 552171 ]: failure with clx.e
+ * (do_defun): terminate with '\0' after inserting '}'
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -631,7 +632,7 @@ char *do_defun (FILE *in, FILE *out, char *line)
   result = split_args (s, arg);
 
   { char *k; for (k = name; *k; k++) *k = toupper (*k); }
-/*  fprintf (stderr, "; %s\n", name);fflush(stderr);*/
+  /*  fprintf (stderr, "; %s\n", name);fflush(stderr);*/
 
   /* Canonicalize the arg vector */
 
@@ -677,10 +678,12 @@ char *do_defun (FILE *in, FILE *out, char *line)
 
         coke = parse_body (in, result, body, 40960);
         len  = strlen (body);
+
         pepsi = body + len;
         while (pepsi != coke) { pepsi[0] = pepsi[-1]; pepsi--; }
         coke[0] = '}';          /* hack, hack */
         result = body;
+        body[len+1]=0;
 
         parse_signature (arg, &req, &opt, &restflag, &keyflag);
 
@@ -732,6 +735,7 @@ char *do_defun (FILE *in, FILE *out, char *line)
         sprintf (oi, "kw_%.5d", nn); push (oi, kw_tab);
       }
   }
+
   return result;
 }
 
