@@ -25,8 +25,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.4  1999/08/27 12:08:44  haible
- * Gilbert: Use ANSI C, no GCC extensions. Untabify.
+ * Revision 1.5  2000/06/17 00:47:22  haible
+ * Recognize NetBSD as Unix.
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -76,7 +76,7 @@
 #if defined(__TURBOC__) || defined(__GO32__) || defined(__WATCOMC__)
 #define STDC_HEADERS 1
 #else
-#if defined(unix) || defined(__unix) || defined(_AIX) || defined(sinix) || defined(__POSIX__)
+#if defined(unix) || defined(__unix) || defined(__unix__) || defined(_AIX) || defined(sinix) || defined(__MACH__) || defined(__POSIX__) || defined(__NetBSD__) || defined(__BEOS__)
 #include "unixconf.h"
 #endif
 #endif
