@@ -20,8 +20,8 @@
 //
 // $Id$
 // $Log$
-// Revision 1.1  1998/07/22 20:22:20  haible
-// Initial revision
+// Revision 1.2  1998/08/09 14:35:29  haible
+// 1998-06-15-old-stdwin.diff
 //
 // Revision 1.18  1997/06/12  00:23:35  gilbert
 // - nothing special
@@ -276,7 +276,7 @@
 //   Also having this implemenation should  gain a big  plus against GCL.  (IMHO
 // gcl is very bad code compared to CLISP! [gcl is actually akcl]) flame,flame.
 //
-// BTW It should be fun to write the graph.d and stdwin.d routines on top of CLX!
+// BTW It should be fun to write the graph.d routines on top of CLX!
 
 
 // --- FUTURE ---

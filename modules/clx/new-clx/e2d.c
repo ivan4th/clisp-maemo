@@ -22,8 +22,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.1  1998/07/22 20:22:18  haible
- * Initial revision
+ * Revision 1.2  1998/08/09 14:35:38  haible
+ * 1998-06-15-old-stdwin.diff
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
@@ -893,7 +893,6 @@ void init (void)
    */
   push ("FFI", known_packages);		/* very likely */
   push ("SCREEN", known_packages); 	/* also likely */
-  push ("STDWIN", known_packages); 	/* Not very probable */
 #endif
 }
 
