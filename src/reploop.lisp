@@ -430,11 +430,10 @@ Continue       :c       switch off single step mode, continue evaluation
                              (let ((restart
                                      (find-restart 'CONTINUE condition)))
                                (and restart
-                                    ;; Ignore the CONTINUE restart if it comes
-                                    ;; from ASSERT with no places, because it
-                                    ;; leads to user frustration.
-                                    (not (eq (restart-interactive restart)
-                                             #'assert-restart-no-prompts))
+                                    ;; Ignore the CONTINUE restart if it is not
+                                    ;; useful without prior corrective action,
+                                    ;; otherwise it leads to user frustration.
+                                    (restart-meaningfulp restart)
                                     restart)))))
                    (interactive-p (interactive-stream-p *debug-io*))
                    (commandsr '()))
@@ -589,7 +588,7 @@ Continue       :c       switch off single step mode, continue evaluation
 
 (defun step-values (values)
   (let ((*standard-output* *debug-io*))
-    (terpri #|*debug-io*|#)
+    (fresh-line #|*debug-io*|#)
     (write-string (TEXT "step ") #|*debug-io*|#)
     (write *step-level* #|:stream *debug-io*|#)
     (write-string " ==> " #|*debug-io*|#)
@@ -602,7 +601,8 @@ Continue       :c       switch off single step mode, continue evaluation
          (do ((L values))
              ((endp L))
            (write (pop L) #|:stream *debug-io*|#)
-           (unless (endp L) (write-string ", " #|*debug-io*|#))))))
+           (unless (endp L) (write-string ", " #|*debug-io*|#)))))
+    (elastic-newline #|*debug-io*|#))
   (values-list values))
 
 (defun step-level () *step-level*)
