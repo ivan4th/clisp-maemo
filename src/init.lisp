@@ -750,7 +750,10 @@
         :datum venv :expected-type '(or null simple-vector)
         (TEXT "~S is an invalid variable environment")
         venv))
-    (and (boundp s) (%symbol-value s)))) ; not found
+    ; not found
+    (if (symbol-macro-expand s)
+      (global-symbol-macro-definition (get s 'SYMBOLMACRO))
+      (and (boundp s) (symbol-value s)))))
 
 ;; Most of the Expansion-functions return two values:
 ;;  (1) the expansion result,
@@ -1987,13 +1990,13 @@
   (flet ((onedir (pathname)
            (let ((pathname-list (directory pathname :full t :circle t)))
              (if (every #'atom pathname-list)
-                 (format t "~{~%~A~}"
-                         (sort pathname-list #'string< :key #'namestring))
-                 (let ((date-format (date-format)))
-                   (dolist (l (sort pathname-list #'string< :key
-                                    #'(lambda (l) (namestring (first l)))))
-                     (format t "~%~A~40T~7D~52T~21<~@?~>"
-                             (first l) (fourth l) date-format (third l))))))))
+               (format t "~{~&~A~.~}"
+                       (sort pathname-list #'string< :key #'namestring))
+               (let ((date-format (date-format)))
+                 (dolist (l (sort pathname-list #'string<
+                                  :key #'(lambda (l) (namestring (first l)))))
+                   (format t "~&~A~40T~7D~52T~21<~@?~>~."
+                           (first l) (fourth l) date-format (third l))))))))
     (if (listp pathnames) (mapc #'onedir pathnames) (onedir pathnames)))
   (values))
 
