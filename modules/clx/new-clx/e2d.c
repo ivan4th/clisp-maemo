@@ -6,7 +6,7 @@
  *    Author:   Gilbert Baumann
  *              <unk6@rz.uni-karlsruhe.de>
  *
- *  This whole bunch of code written quick and dirty. [Mit der heiﬂen Nadel gestrickt!]
+ *  This whole bunch of code written quick and dirty. [Mit der hei√üen Nadel gestrickt!]
  */
 
 /*
@@ -25,8 +25,8 @@
  * - compilation in WIDE mode works now (use `nullobj' instead of `0')
  *
  * $Log$
- * Revision 1.5  2000/06/17 00:47:22  haible
- * Recognize NetBSD as Unix.
+ * Revision 1.6  2000/10/23 12:57:24  haible
+ * Convert all sources to UTF-8.
  *
  * Revision 1.7  1996/10/11  15:07:58  gilbert
  * - removed all GETTEXT, it is broken with 07-22
