@@ -46,7 +46,10 @@
 #
 # $Id$
 # $Log$
-# Revision 1.13  2005/08/28 16:27:17  sds
+# Revision 1.14  2005/08/29 18:18:56  sds
+# regenerated
+#
+# Revision 1.17  2005/08/28 16:27:17  sds
 # regenerated
 #
 # Revision 1.16  2005/07/20 23:58:29  sds
@@ -194,7 +197,10 @@
 #
 # $Id$
 # $Log$
-# Revision 1.13  2005/08/28 16:27:17  sds
+# Revision 1.14  2005/08/29 18:18:56  sds
+# regenerated
+#
+# Revision 1.17  2005/08/28 16:27:17  sds
 # regenerated
 #
 # Revision 1.16  2005/07/20 23:58:29  sds
@@ -298,7 +304,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: GNU clisp 1996-03-31\n"
 "Report-Msgid-Bugs-To: clisp-devel@lists.sourceforge.net\n"
-"POT-Creation-Date: 2005-08-27 23:46:01-0400\n"
+"POT-Creation-Date: 2005-08-29 12:46:33-0400\n"
 "PO-Revision-Date: 1997-08-11 18:16 MET DST\n"
 "Last-Translator: Carlos Linares López <clinares@delicias.dia.fi.upm.es>\n"
 "Language-Team: Spanish <es@li.org>\n"

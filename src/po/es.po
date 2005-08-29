@@ -46,6 +46,9 @@
 #
 # $Id$
 # $Log$
+# Revision 1.18  2005/08/29 18:18:56  sds
+# regenerated
+#
 # Revision 1.17  2005/08/28 16:27:17  sds
 # regenerated
 #
@@ -194,6 +197,9 @@
 #
 # $Id$
 # $Log$
+# Revision 1.18  2005/08/29 18:18:56  sds
+# regenerated
+#
 # Revision 1.17  2005/08/28 16:27:17  sds
 # regenerated
 #
@@ -298,7 +304,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: GNU clisp 1996-03-31\n"
 "Report-Msgid-Bugs-To: clisp-devel@lists.sourceforge.net\n"
-"POT-Creation-Date: 2005-08-28 12:09:15-0400\n"
+"POT-Creation-Date: 2005-08-29 12:46:24-0400\n"
 "PO-Revision-Date: 1997-08-11 18:16 MET DST\n"
 "Last-Translator: Carlos Linares López <clinares@delicias.dia.fi.upm.es>\n"
 "Language-Team: Spanish <es@li.org>\n"
@@ -5139,11 +5145,11 @@ msgstr "~S: el valor de ~S debe ser un RANDOM-STATE, no ~S"
 msgid "~S: argument should be positive and an integer or float, not ~S"
 msgstr "~S: el argumento debe ser un número positivo del tipo INTEGER o FLOAT, no ~S"
 
-#: aridecl.d:350
+#: aridecl.d:352
 msgid "division by zero"
 msgstr "división entre cero"
 
-#: aridecl.d:358
+#: aridecl.d:360
 msgid "floating point overflow"
 msgstr "desbordamiento de coma flotante"
 
@@ -5153,7 +5159,7 @@ msgstr "desbordamiento de coma flotante"
 # permite la representación de números en coma flotante. Por ejemplo:
 # 2.3e-30 * 2.3e-30 sería 5.29e-60 que excedió el límite inferior.
 #
-#: aridecl.d:366
+#: aridecl.d:368
 msgid "floating point underflow"
 msgstr "desbordamiento inferior de coma flotante"
 
