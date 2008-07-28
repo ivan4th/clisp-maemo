@@ -1,3 +1,2438 @@
+2008-07-28  vlado tzankov  <vtzankov@gmail.com>
+
+	Initial commit of multithreading. Lisp globals are implemented via
+	TLS (with or without compiler support)
+	* lispbibl.d 
+	(struct clisp_thread_t): reordered the fields. structure starts with the ones 
+	that have to be accesses from modules (STACK, mv_spaces, etc).
+	Added _SP_anchor (was global in spvw.d)
+	(current_thread, _current_thread, current_thread_tls_key): macro
+	current_thread() provides access to the current clisp_thread_t via 
+	per_thread variable _current_thread (in presence of compiler support) or 
+	through xthread_key_get (slow).
+	(THREAD_SYMVALUES_ALLOCATION_SIZE): initial allocation size of clisp_thread_t 
+	structure - at the end symvalues will be appended (before the change 
+	the size depended on the mmap_pagesize)
+	(per_thread): removed all qualifiers from global variables in single thread builds.
+	in MT builds - there is single global per thread variable for CLISP internals.
+	(thread_objects_offset and thread_objects_count): excluded _lthread from the returned
+	offset/count. seems to cause problems with GC sometimes.
+	(set_current_thread): the first thing a new thread should call - assigns the clisp_thread_t
+	to the TLS.
+	(create_thread,delete_thread,maxnum_symvalues): made global
+	* spvw.d 
+	(create_thread): changed to accept size of LISP stack. 
+	(delete_thread): frees the allocated LISP stack.
+	(allocate_lisp_thread_stack): allocates LISP stack. currently with malloc()
+	(get_reserved_memory_region, is_safe_region): ensure that address range 
+	for LISP stack is safe (was used in the version with SP tweaking - probably will 
+	be needed later).
+	(init_memory, main): "globals" initialization moved after current_thread() is valid. 
+	* spvw_typealloc.d
+	(allocate_thread): xth_system will be initialized on thread creation. what to do 
+	with the other fields?
+	* xthread.d
+	(xthread_cancel): after cancellation - wait the thread to exit.
+	* zthread.d
+	(NC_STACK_,NC_pushSTACK): macros for filling non-current(NC) LISP stacks 
+	of not yet started threads.
+	(thread_stub): the main entry point of threads created by MAKE-THREAD.
+	(MAKE-THREAD): implemented. creates a new OS thread and LISP record for it.
+	(exec_timeout_call): the entry point of threads created by CALL-WITH-TIMEOUT
+	(CALL-WITH-TIMEOUT): reimplemented. creates OS thread bu NO LISP record for it.
+	* thread.lisp
+	(TIMEOUT-MESSAGE): convert to string the default answer (y-or-n provides
+	list(s) with characters).
+
+2008-07-27  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 2029069 ]: stack overflow with gethash
+	* hashtabl.d (hashcode3_atom, hashcode3stable_atom, sxhash_atom):
+	accept level argument (ignore it because EQUAL hash code does not
+	recurse on atoms)
+	(HASHCODE_MAX_LEVEL): rename from HASHCODE_TREE_MAX_LEVEL
+	(HASHCODE_NEED_LEAVES): rename from HASHCODE_TREE_NEED_LEAVES
+	(hashcode_tree_rec): pass level+1 to hashcode_leaf
+	(hashcode_tree): accept level argument
+	(hashcode3, hashcode3stable, hashcode4, sxhash): pass level=0 to
+	hashcode_tree()
+	(hashcode4_): new macro: like hashcode4(), but pass level+1 to
+	hashcode_tree()
+	(hashcode4_atom, hashcode4_vector, hashcode4_vector_T): accept
+	level argument
+	(hashcode4_vector): limit count to HASHCODE_NEED_LEAVES
+
+2008-07-27  Sam Steingold  <sds@gnu.org>
+
+	* hashtabl.d (hashcode_pathname): extracted
+	(hashcode3_atom, hashcode3stable_atom): use it
+
+2008-07-26  Sam Steingold  <sds@gnu.org>
+
+	* control.d (skip_declarations): remove
+	(finish_flet): rename the last argument and revert its meaning
+	(FLET, MACROLET, FUNCTION-MACRO-LET): update finish_flet calls
+	NB: FUNCTION-MACRO-LET now barfs on declarations in both compiled
+	and interpreted code
+
+2008-07-24  Sam Steingold  <sds@gnu.org>
+
+	* format.lisp (format-logical-block-parse): uniform error messages
+
+2008-07-24  Sam Steingold  <sds@gnu.org>
+
+	* utils/clispload.lsp (*expected-failures*): add eval-when.15 and
+	eval-when.17 (/= EVAL :EXECUTE) & (/= LOAD :LOAD-TOPLEVEL)
+
+2008-07-23  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (c-LABELS, c-FLET, c-MACROLET): rework the "ANSI
+	SPECIAL declarations" patch to fix a LABELS flaw
+
+2008-07-23  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (check-fdef-name): add local macro
+	(c-FLET, c-LABELS, c-FUNCTION-MACRO-LET, c-GENERIC-FLET)
+	(c-GENERIC-LABELS): use it
+
+2008-07-23  Sam Steingold  <sds@gnu.org>
+
+	* init.lisp (%expand-form): FLET, LABELS, MACROLET
+	respect the SPECIAL declarations, as per ANSI
+	NOTE: FUNCTION-MACRO-LET still does NOT - it is our internal operator
+	* control.d (make_vframe_activate): extracted from LOCALLY
+	(LOCALLY, LABELS): use it
+	(finish_flet): accept an extra argument ignore_declarations
+	(FLET, MACROLET): pass ignore_declarations=false to finish_flet
+	(FUNCTION-MACRO-LET): pass ignore_declarations=true to finish_flet
+	* compiler.lisp (skip-declarations): remove
+	(with-bindings, with-bindings-lite): add local macros
+	(c-FLET, c-LABELS): use with-bindings
+	(c-MACROLET): use with-bindings-lite
+
+2008-07-23  Sam Steingold  <sds@gnu.org>
+
+	* init.lisp (cons-*fenv*, illegal-syntax): add
+	(%expand-form, %expand-fundefs-1, %expand-funmacdefs-1): use them
+	* macros3.lisp (expand-LETF*, expand-LETF): use ILLEGAL-SYNTAX
+	* compiler.lisp (add-fenv, c-FLET, c-FUNCTION-MACRO-LET)
+	(c-GENERIC-FLET, c-MACROLET): use CONS-*FENV*
+	(c-illegal-syntax): add
+	(analyze-letlist, c-COMPILER-LET): use it
+	(mk-var): add local macro
+	(c-FLET, c-LABELS, c-FUNCTION-MACRO-LET, c-GENERIC-FLET)
+	(c-GENERIC-LABELS): use it
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (OBJECT_OUT, NOBJECT_OUT): fflush stdout
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* modules/pcre/cpcre.c (PCRE-COMPILE): fix a typo: UNGREADY->UNGREEDY
+	Reported by Todd Kirby <ffmpeg.php@gmail.com>
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (check-script): many more tests
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* stream.d (error_value_stream): print the caller
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* spvw_sigsegv.d (print_mem_stats): also print a timescore_t
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* debug.d (%ROOM): additionally return gc_count, gc_space, gc_time
+	* lispbibl.d (internal_time_to_I): declare extern
+	* time.d (internal_time_to_I): make global
+	* room.lisp (room): return the same values as gc, print gc stats
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* eval.d (SUBR-INFO): use STACK_to_mv instead of L(values)
+	* stream.d (MAKE-PIPE-IO-STREAM): ditto
+	* time.d (%%TIME): ditto
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d: fix bug #[ 2011096 ]: unicode in comments causes
+	compile errors when LANG=ja_JP.eucJP
+
+2008-07-22  Sam Steingold  <sds@gnu.org>
+
+	* utils/clispload.lsp (*expected-failures*): drop tests that we pass
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (get_font_info_and_display): prefix
+	*CANONICALIZE-ENCODING* with XLIB:: for bootstrap when is has not
+	been exported yet
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	the sets of declaration and type names are disjoint, as per ANSI
+	(see http://www.lisp.org/HyperSpec/Body/dec_type.html)
+	* condition.lisp (check-not-type, check-not-declaration): define
+	(define-condition): use CHECK-NOT-DECLARATION
+	* clos-class3.lisp (defclass): use CHECK-NOT-DECLARATION
+	* compiler.lisp (c-PROCLAIM): use CHECK-NOT-TYPE
+	* constsym.d (check_not_type): declare
+	* control.d (PROCLAIM): use CHECK-NOT-TYPE for DECLARATION
+	* defstruct.lisp (defstruct): use CHECK-NOT-DECLARATION
+	* init.lisp (check-not-declaration): predefine
+	* macros2.lisp (deftype): use CHECK-NOT-DECLARATION
+	* utils/clispload.lsp (*expected-failures*): remove
+	DECLARATION.([4-9]|1[01]) (i.e. tests 4..11 now pass)
+
+2008-07-21  Bruno Haible  <bruno@clisp.org>
+
+	* makemake.in (LIBS): Remove special code for Solaris 2.1.
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	fix "-x ... -repl", broken since 2008-01-06
+	* reploop.lisp (main-loop): accept an optional exit argument
+	* spvw.d (main_actions): pass !p->argv_repl to MAIN-LOOP
+	* makemake.in (check-script): test "-x ... -repl"
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (ANSI_CLISP): add "-p CL-TEST"
+	(check-ansi-tests, check-ansi-tests-debug, check-ansi-tests-compiled)
+	(check-ansi-tests-compiled-debug): remove IN-PACKAGE from -x
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 2022362 ]: Problem :external-format :dos and (setf
+	stream-element-type): after a ((setf stream-element-type)
+	'(unsigned-byte 8)) after read-line on a :dos stream
+	an NL byte (10) is read from the stream
+	* stream.d (rd_by_iau8_unbuffered, rd_by_array_iau8_unbuffered)
+	(rd_by_iau8_buffered, rd_by_array_iau8_buffered): respect
+	ChannelStream_ignore_next_LF
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (check_file_reopen): when *REOPEN-OPEN-FILE* is WARN,
+	issue a warning instead of signaling an error
+	* constsym.d (check_file_reopen): declare
+	* spvw.d (init_symbol_values): init *REOPEN-OPEN-FILE* to ERROR
+	* utils/clispload.lsp (*reopen-open-file*): set to WARN to pacify
+	6 tests
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	* utils/clispload.lsp (*pprint-first-newline*): set to NIL to
+	conform to Paul's expectations
+
+2008-07-21  Sam Steingold  <sds@gnu.org>
+
+	* encoding.d: do not #include <stdio.h>, it is already done by lispbibl
+
+2008-07-20  Sam Steingold  <sds@gnu.org>
+
+	* pprint.lisp (copy-pprint-dispatch): as per ANSI, when no table
+	is specified, return a COPY of *PRINT-PPRINT-DISPATCH*, not its value
+
+2008-07-20  Sam Steingold  <sds@gnu.org>
+
+	* io.d (justify_empty_2): concatenate all strings in a single-liner
+	into one string instead of pushing all the components into the block
+
+2008-07-18  Sam Steingold  <sds@gnu.org>
+
+	* io.d (paren_open): a minor simplification
+	(print): remove an unused static function
+	(justify_empty_2): never drop any strm_pphelp_strings (this fixes
+	the "risky" test in iofkts.tst)
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.lisp (*canonicalize-encoding*):
+	defvar and export from XLIB
+	* modules/clx/new-clx/clx.f (get_font_info_and_display): use it
+	together with EXT:CANONICALIZE instead of the C ad-hoc-ery
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* dfloat.d (RA_to_DF): clean up the STACK before error_overflow()
+	* ffloat.d (RA_to_FF): ditto
+	* sfloat.d (RA_to_SF): ditto
+	These bugs are probably ~20 years old.
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* macros3.lisp (canonicalize): new function
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (assure_dir_exists) [PATHNAME_UNIX]: fix a GC-safety
+	bug introduced on 2008-07-11 (get_path_info is GC-unsafe)
+	(classify_namestring): GC-safe
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d: more robust HAVE_SHELL conditional handling
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* error.d (check_c_integer_replacement): use the appropriate
+	[su]int(8|16|32|64)_p test instead of always using uint8_p
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* error.d (caller_name): new function
+	(check_symbol_replacement, check_variable_value_replacement):
+	use it when the caller maybe either Subr or Fsubr
+	Reported by Vladimir Tzankov <vtzankov@gmail.com>
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (directory_search_scandir) [WIN32_NATIVE]: use
+	direntry_to_string in one more place
+
+2008-07-17  Sam Steingold  <sds@gnu.org>
+
+	* condition.lisp (check-value): disable USE-VALUE when place is
+	*PATHNAME-ENCODING* because O(pathname_encoding) is used multiple
+	times for the same directory entry
+
+2008-07-16  Sam Steingold  <sds@gnu.org>
+
+	* eval.d (invoke_handlers): reactivate and deactivate handlers
+	only around lisp-compiled handlers, not C handlers, who must
+	deactivate themselves (this is necessary because the C handlers
+	which call longjmp do not abide by the HANDLER_FRAME)
+	* pathname.d (handle_directory_encoding_error): deactivate when
+	already running; reset STACK
+	(direntry_to_string): check STACK
+
+2008-07-16  Sam Steingold  <sds@gnu.org>
+
+	* macros2.lisp (report-one-new-value-string)
+	(report-one-new-value-string-instead, report-new-values-string):
+	remove the leading "You may " from the message: the message
+	describes the action of the user, such as "Abort main loop" or
+	"inspect this frame", cf. reploop.lisp
+	* reploop.lisp (commands1): more uniform message capitalization
+
+2008-07-16  Sam Steingold  <sds@gnu.org>
+
+	* control.d (SYMBOL-VALUE): tighten identification of STORE-VALUE
+	selection in CHECK-VALUE: value2 is T, not just non-NIL
+	* eval.d (eval1): ditto
+	* error.d, lispbibl.d (check_variable_value_replacement):
+	ditto (comment)
+
+2008-07-16  Sam Steingold  <sds@gnu.org>
+
+	* error.d (check_variable_value_replacement): do not pushSTACK
+	PLACE unless check_value is to be called
+
+2008-07-16  Sam Steingold  <sds@gnu.org>
+
+	DIRECTORY signals correctable errors on bad pathnames [1st draft]
+	* pathname.d (handle_directory_encoding_error): new function:
+	ignore the error, pass condition in value1 back to the caller
+	(direntry_to_string): new function: call n_char_to_string, catch
+	charset-type-error, re-signal it with restarts
+	(directory_search_scandir): use direntry_to_string
+	* condition.lisp (check-value): accommodate direntry_to_string:
+	when place is SYSTEM::PATHNAME-ENCODING, add a CONTINUE restart
+	* constobj.d (handler_for_charset_type_error): always enable
+	* constsym.d (datum): add
+
+2008-07-15  Bruno Haible  <bruno@clisp.org>
+
+	Avoid buffer overrun.
+	* encoding.d (handle_incomplete): Add destend argument.
+	(uni16be_mbstowcs, uni16le_mbstowcs, uni32be_mbstowcs,
+	uni32le_mbstowcs): Update callers.
+
+2008-07-15  Bruno Haible  <bruno@clisp.org>
+
+	Fix bug introduced on 2003-03-11.
+	* encoding.d (uni16_mblen): Make consistent with uni16be_mbstowcs and
+	uni16le_mbstowcs.
+	(uni32be_mblen): Make consistent with uni32be_mbstowcs.
+	(uni32le_mblen): Make consistent with uni32le_mbstowcs.
+	(CONVERT-STRING-FROM-BYTES): Revert last commit.
+
+2008-07-15  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (fixperms): undo the 2008-05-15 patch:
+	cannot look above the top-level directory
+
+2008-07-15  Bruno Haible  <bruno@clisp.org>
+
+	* makemake.in (interpreted.mem, halfcompiled.mem): Depend on
+	config.lisp.
+	(clean5): Don't remove config.lisp.
+	(clean6): Remove config.lisp.
+
+2008-07-15  Bruno Haible  <bruno@clisp.org>
+
+	* encoding.d: Verify already at compile time that HAVE_GOOD_ICONV
+	is set rather than crashing at initialization time.
+
+2008-07-15  Bruno Haible  <bruno@clisp.org>
+
+	* makemake.in (clean4): Don't remove all the $SUBDIRS but only the
+	built files inside them.
+
+2008-07-15  Sam Steingold  <sds@gnu.org>
+
+	* spvw_debug.d (nobject_out1): updated hash-table output for the
+	removal of the ht_freelist (2004-05-09 1.49 2004/06/04)
+
+2008-07-15  Sam Steingold  <sds@gnu.org>
+
+	* encoding.d (CONVERT-STRING-FROM-BYTES): check (cptr == cendptr)
+	after (bptr == bendptr)
+
+2008-07-15  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (number_of_conditions_defined_in_c): rename from
+	condition_for_broken_compilers_that_dont_like_trailing_commas
+	* error.d (SYSTEM::%DEFCLCS): use it to check whether the argument
+	is consistent with constsym.d
+
+2008-07-14  Sam Steingold  <sds@gnu.org>
+
+	src/m4/sigsegv.m4 --> src/glm4/libsigsegv.m4
+	* Makefile.devel (gnulib-imported): also import libsigsegv
+	* configure: use gl_cv_lib_sigsegv instead of cl_cv_lib_sigsegv
+	* configure.in: use gl_LIBSIGSEGV instead of CL_SIGSEGV
+	* lispbibl.d: use HAVE_LIBSIGSEGV instead of NO_SIGSEGV
+	* makemake.in (XCFLAGS): do not add NO_SIGSEGV
+	* src/m4/sigsegv.m4: remove
+	* src/glm4/libsigsegv.m4: add
+	* gllib/Makefile.am, glm4/gnulib-cache.m4, glm4/gnulib-comp.m4:
+	regenerate
+
+2008-07-13  Sam Steingold  <sds@gnu.org>
+
+	* error.d (error_illegal_arg): new function
+	* lispbibl.d (error_illegal_arg): declare
+	* constobj.d (type_buffered_arg): add for stream.d:test_buffered_arg
+	* stream.d (test_buffered_arg, test_eltype_arg, check_float_eltype):
+	use error_illegal_arg
+	* encoding.d (MAKE-ENCODING): ditto
+	* pathname.d (check_direction, check_if_does_not_exist)
+	(check_if_exists, DIRECTORY): ditto
+	* hashtabl.d: fix an error message case
+
+2008-07-13  Sam Steingold  <sds@gnu.org>
+
+	* encoding.d (base64_wcstombs): set CHARSET-TYPE-ERROR slots DATUM
+	and EXPECTED-TYPE
+	(error_incomplete, error_uni32_invalid, error_utf8_invalid1)
+	(error_utf8_invalid2, error_utf8_invalid3, error_utf8_invalid4)
+	(error_nls_invalid): signal CHARSET-TYPE-ERROR instead of ERROR
+	(base64_wcstombs, error_unencodable, error_incomplete)
+	(error_uni32_invalid, error_utf8_invalid1, error_utf8_invalid2)
+	(error_utf8_invalid3, error_utf8_invalid4): print the caller
+
+2008-07-13  Sam Steingold  <sds@gnu.org>
+
+	* init.lisp (search-file): list matching files from the FIRST
+	directory containing any matching file, because otherwise every
+	load will mean a full traversal of ~/lisp/**/
+
+2008-07-13  Sam Steingold  <sds@gnu.org>
+
+	* defs1.lisp (*load-logical-pathname-translations-database*):
+	since SEARCH-FILE now handles both files and directories
+	similarly, only one element is needed
+	(load-logical-pathname-translations): updated for the search-file
+	changes: when the search finds a directory, it is returned as is
+	instead of its contents
+	* init.lisp (search-file): EXTENSIONS is optional, also accept KEEP-DIRS
+	(load): pass KEEP-DIRS=NIL to search-file
+
+2008-07-13  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (error_file_stream_unnamed, error_dir_not_exists)
+	(error_noname, error_notdir): print caller
+	(FILE-NAMESTRING, DIRECTORY-NAMESTRING, ABSOLUTE-PATHNAME)
+	(physical_namestring): simplify code
+
+2008-07-12  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (classify_namestring): extracted from check_sub_directory
+	(check_sub_directory): remove
+	(directory_search_1subdir): use classify_namestring instead
+	(PROBE-PATHNAME): also return the physical pathname as the 2nd value
+	* init.lisp (ppn-fwd): use the second value of PROBE-PATHNAME
+	* win32.d (MAXPATHLEN): define (needed for classify_namestring)
+
+2008-07-12  Sam Steingold  <sds@gnu.org>
+
+	* spvw_debug.d (ThePackage_, ThePathname_) [DEBUG_SPVW]: add
+
+2008-07-11  Sam Steingold  <sds@gnu.org>
+
+	new function PROBE-PATHNAME
+	* pathname.d (probe_path_from_stream): extracted from PROBE-FILE
+	(PROBE-FILE): use it
+	(PROBE-PATHNAME): implemented
+	* constsym.d, subr.d (probe_pathname): declare
+	* init.lisp (probe-pathname): export
+	(search-file): use it instead of probe-file
+
+2008-07-11  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (error_directory): extracted from the unix version of
+	assure_dir_exists
+	(assure_dir_exists) [WIN32_NATIVE]: use it instead of
+	OS_file_error for consistency with unix
+	(struct file_status) [WIN32_NATIVE]: new slot fs_fileattr
+	(file_status_is_dir): new function
+	(get_path_info) [PATHNAME_UNIX]: extracted from assure_dir_exists
+	(assure_dir_exists) [PATHNAME_UNIX]: use it
+	(if_HAVE_LSTAT): remove
+	(access0) [WIN32_NATIVE]: set fs_fileattr
+
+2008-07-10  Sam Steingold  <sds@gnu.org>
+
+	* init.lisp (search-file <final def>): do not use DIRECTORY when
+	the pathname is non-wild to avoid the denial-of-service attack
+
+2008-07-10  Sam Steingold  <sds@gnu.org>
+
+	* encoding.d (error_nls_invalid): print function name
+	* pathname.d (check_no_wildcards): ditto
+
+2008-07-10  Sam Steingold  <sds@gnu.org>
+
+	* debug.d (read_form): fix a GC-safety bug
+	 (save function before subsstring)
+	* foreign.d (check_faddress_valid): fix a GC-safety bug
+	 (check_fpointer can trigger GC!)
+	(validate_fpointer): return the argument
+	(convert_to_foreign): fix a GC-safety bug
+	 (validate_fpointer can trigger GC)
+	* modules/clx/new-clx/clx.f (XLIB:SCREEN-SAVER): fix a GC-safety bug
+	 (defcheckers are GC-unsafe)
+
+2008-07-10  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 2015118 ]: (ash 1 huge) blows SP instead of signaling
+	an arithmetic-error
+	* intlog.d (I_I_ash_I): tighten the shift check (use 16-bit intW
+	instead of 32-bit intWC) so that the "shift is too large"
+	error is signaled instead of a SP overflow which results from
+	__builtin_alloca not checking its argument and overwriting stack
+
+2008-07-09  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1385641 ]: g++ debug_gcsafety amd64 build is broken
+	* lispbibl.d (pgci_pointable, ngci_pointable) [DEBUG_GCSAFETY]:
+	pass obj.one_o through pointable_address_unchecked before nonimmprobe
+	(cgci_types_pointable, pgci_types_pointable, ngci_types_pointable)
+	[TYPECODES & DEBUG_GCSAFETY]: wrap ?gci_pointable in
+	pointable_address_unchecked
+
+2008-07-09  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (UL_to_I) [DEBUG_GCSAFETY & intLsize<=oint_data_len]:
+	fix export the definition to clisp.h
+
+2008-07-09  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (STAT-VFS):
+	use the right SIZEOF_* conditionals
+	(FILE_FUNCTION2): add a cast to fix g++ compilation
+
+2008-07-09  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 2014262 ]: float/rational comparison underflows
+	* realelem.d (R_R_comp): inhibit floating-point-underflow when
+	converting to a rational
+
+2008-07-08  Sam Steingold  <sds@gnu.org>
+
+	* spvw_sigcld.d (end_want_sigcld): avoid the gcc warning:
+	suggest a space before ';' or explicit braces
+
+2008-07-08  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (srcdir) [CROSS]: do not overwrite
+	(module_configure_flags) [CROSS]: add --build=${TSYS}
+	Reported by Luca Capello <luca@pca.it>
+
+2008-07-08  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: 2.46+ (2008-07-08)
+
+2008-07-07  Sam Steingold  <sds@gnu.org>
+
+	* m4/shm.m4 (CL_SHM_H): run before CL_SHM
+	(CL_SHM): require CL_SHM_H, do not set have_shm
+	* m4/shm-rmid.m4 (CL_SHM_RMID): use cl_cv_sys_shm_works
+	instead of have_shm
+
+2008-07-07  Sam Steingold  <sds@gnu.org>
+
+	* _clisp.c (main): "-t"[raditional] does not take an argument
+
+2008-07-06  Bruno Haible  <bruno@clisp.org>
+
+	Remove MULTIMAP_MEMORY_VIA_SHM and MULTIMAP_MEMORY.
+	It cannot compete with SINGLEMAP_MEMORY because it
+	1. consumes a lot more memory for page tables, and
+	2. hampers swapping in kernels without reverse mapping pointers.
+	* lispbibl.d (MULTIMAP_MEMORY_VIA_SHM, MULTIMAP_MEMORY): Don't define.
+	* spvw.d (canonaddr, canon): Remove macros.
+	(MULTIMAP_MEMORY_SYMBOL_TAB): Remove macro.
+	(init_memory, main): Update.
+	* spvw_fault.d (xmmprotect): Remove macro/function.
+	(handle_read_fault, handle_readwrite_fault, handle_fault)
+	(handle_fault_range): Update.
+	* spvw_genera1.d (xmprotect_old_generation_cache): Renamed from
+	xmmprotect_old_generation_cache.
+	(in_old_generation_0, in_old_generation_1, in_old_generation)
+	(build_old_generation_cache, rebuild_old_generation_cache)
+	(gc_check_at): Update.
+	* spvw_genera3.d (update_old_generation): Update.
+	* spvw_global.d (init_mem_heapnr_from_type): Update.
+	* spvw_memfile.d (old_symbol_tab_o, loadmem_update)
+	(loadmem_from_handle): Update.
+	* spvw_weak.d (MARK, add_watchable): Update.
+	* unix.d (SHMMAX): Remove macro fallback.
+	* built.d (built_flags): Remove MULTIMAP_MEMORY_VIA_SHM and
+	MULTIMAP_MEMORY.
+	* makemake.in (XCFLAGS): Remove option -DNO_MULTIMAP_SHM.
+	(SPVW_INCLUDES): Remove spvw_multimap.
+	* po/Makefile.devel (DSOURCES): Remove spvw_multimap.
+	* Makefile.devel (build-linux-x86-standard-spvw_mixed_pages)
+	(build-linux-x86-noexec-spvw_mixed_pages)
+	(build-darwin-powerpc-standard-spvw_mixed_pages)
+	(build-darwin-powerpc-noexec-spvw_mixed_pages):
+	Remove option -DNO_MULTIMAP_SHM.
+
+2008-07-05  Bruno Haible  <bruno@clisp.org>
+
+	Remove MULTIMAP_MEMORY_VIA_FILE.
+	It cannot compete with SINGLEMAP_MEMORY because it
+	1. periodically flushes the working memory to disk,
+	2. consumes a lot more memory for page tables, and
+	3. hampers swapping in kernels without reverse mapping pointers.
+	* lispbibl.d (MULTIMAP_MEMORY_VIA_FILE): Don't define.
+	* spvw.d (usage): Don't mention option -t.
+	(argv_initparams): Remove argv_tmpdir field.
+	(parse_options): Don't recognize option -t.
+	(init_memory): Update.
+	* spvw_multimap.d [MULTIMAP_MEMORY_VIA_FILE]: Remove code.
+	* unix.d: Don't undefine HAVE_MSYNC.
+	Don't include headers for statvfs or statfs.
+	* built.d (built_flags): Remove MULTIMAP_MEMORY_VIA_FILE.
+	* m4/stat.m4 (CL_STAT): Move tests for statvfs, statfs...
+	* modules/syscalls/configure.in: ... to here.
+	* makemake.in (XCFLAGS): Remove option -DNO_MULTIMAP_FILE.
+	* Makefile.devel (build-linux-x86-standard-spvw_mixed_pages)
+	(build-linux-x86-noexec-spvw_mixed_pages)
+	(build-darwin-powerpc-standard-spvw_mixed_pages)
+	(build-darwin-powerpc-noexec-spvw_mixed_pages): Likewise.
+
+2008-07-02  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (gnulib-imported): also get nocrash
+	updated from the gnulib repository
+
+2008-07-02  Sam Steingold  <sds@gnu.org>
+
+	* m4/ffcall-codeexec.m4, m4/ffcall-ireg.m4, m4/ffcall-pccstruct.m4:
+        * m4/ffcall-smallstruct.m4: remove libffcall-specific files
+	* m4/general.m4 (CL_FFCALL_COMMON_LIBTOOL, CL_FFCALL_COMMON_TRAMPOLINE)
+	(CL_CANONICAL_HOST_CPU_FOR_FFCALL): remove
+
+2008-07-02  Sam Steingold  <sds@gnu.org>
+
+	* stream.d (make_terminal_io): pipe, not just file, i/o handles
+	imply non-terminal standard i/o; this should somewhat simplify
+	scripting by not requiring the users to resort to make-stream
+	(handle_type_t): new type
+	(handle_type, regular_handle_type_p, pipe_handle_type_p)
+	(pipe_file_handle_p): new functions
+	(regular_handle_p): a macro combination of regular_handle_type_p
+	and handle_type
+
+2008-07-02  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: 2.46 (2008-07-02)
+
+2008-07-01  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (make_xid_obj_2): signal a
+	LOOKUP-ERROR instead of an ERROR; use MAKE-CONDITION &
+	SYS::CORRECTABLE-ERROR instead of correctable_error()
+	(x_type_error): new function
+	(my_type_error, with_stringable_0_tc, get_aint32): use it
+	(make_xid_obj_2): no prealloc for cached objects!
+	* lispbibl.d (correctable_error): do NOT export to clisp.h
+
+2008-06-30  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (make_xid_obj_low): check that
+	prealloc is of the correct type
+	* modules/clx/new-clx/image.lisp (*image-bit-lsb-first-p*)
+	(*image-byte-lsb-first-p*): default to (NOT SYS::*BIG-ENDIAN*)
+
+2008-06-30  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 2002364 ]: XID reuse causes clx cache to get out of sync
+	* modules/clx/new-clx/clx.f (make_xid_obj_2): when the cached
+	object is of the wrong type, signal a continuable error and offer
+	to invalidate either the cache entry or the whole cache
+	* lispbibl.d (correctable_error): export to clisp.h
+
+2008-06-30  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 2007052 ] socket-connect with :timeout to a dead port
+	* socket.d (connect_via_ip): use getsockopt() to check the status
+	of the socket before returning it, as described in the linux man page
+
+2008-06-29  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: 2.45++: pretest [+ gnulib-imported build-aux-update]
+
+2008-06-29  Sam Steingold  <sds@podval.org>
+
+	* modules/libsvm: upgraded to upstream 2.86
+
+2008-06-28  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: new version number convention: VERSION_NUMBER is
+	  = MAJOR.MINOR for release,
+	  = MAJOR.MINOR+ for development, and
+	  = MAJOR.MINOR++ for pretest
+	RELEASE_DATE is the date when VERSION_NUMBER was modified.
+	Set to 2.45+/2008-06-28
+
+2008-06-28  Sam Steingold  <sds@gnu.org>
+
+	* configure: fail if FFI modules are specified
+	but FFCALL is not available
+
+2008-06-28  Sam Steingold  <sds@gnu.org>
+
+	* modules/netica/link.sh (NEW_LIBS): add -lpthread
+
+2008-06-28  Sam Steingold  <sds@gnu.org>
+
+	* utils/modprep.lisp (init-to-tag):
+	bind *PRINT-LINES* when printing huge tags
+
+2008-06-27  Sam Steingold  <sds@gnu.org>
+
+	* spvw_debug.d (nobject_out1): use symbol_without_flags when
+	printing a symbol
+
+2008-06-27  Sam Steingold  <sds@gnu.org>
+
+	fix special bindings in evaluated code on 64bit platforms
+	* control.d (specdecled_) [!NO_symbolflags]: use
+	symbol_without_flags when comparing symbols
+
+2008-06-27  Sam Steingold  <sds@gnu.org>
+
+	* constsym.d, control.d, eval.d, fsubr.d, io.d, lisparit.d:
+	* package.d, predtype.d, spvw.d, spvw_allocate.d, spvw_language.d
+	(let*, *package*, *readtable*, *evalhook*, *applyhook*)
+	(*gc-statistics*, *random-state*):
+	use "star" instead of "stern" for C names
+	* intdiv.d (UDS_divide_): rename local variable q_stern -> q_star
+	* intsqrt.d (UDS_sqrt_): rename local variable b_stern -> b_star
+
+2008-06-26  Sam Steingold  <sds@gnu.org>
+
+	* utils/modprep.lisp (print-tables-1): use "..._of_list" instead
+	of "..._from_list"
+	* modules/berkeley-db/bdb.c, modules/clx/new-clx/clx.f:
+	* modules/rawsock/rawsock.c, modules/syscalls/calls.c: update
+
+2008-06-26  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.lisp (WITH-GCONTEXT, set-wm-class):
+	STRING-CONCAT requires package prefix
+
+2008-06-26  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/demos/sokoban.lisp (init-sokoban):
+	do not set *display*
+	(sokoban): use xlib:with-open-display;
+	handle numeric keypad
+
+2008-06-25  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (change_property): remove
+	(SET-WM-HINTS, CHANGE-PROPERTY): use XChangeProperty() directly
+	and ignore its return value which is always 1
+	(RECOLOR-CURSOR): fix background handling
+
+2008-06-25  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.lisp (with-open-display): define & export
+	* modules/clx/new-clx/demos/bball.lisp:
+	* modules/clx/new-clx/demos/bwindow.lisp:
+	* modules/clx/new-clx/demos/clclock.lisp:
+	* modules/clx/new-clx/demos/greynetic.lisp:
+	* modules/clx/new-clx/demos/hanoi.lisp:
+	* modules/clx/new-clx/demos/koch.lisp:
+	* modules/clx/new-clx/demos/petal.lisp:
+	* modules/clx/new-clx/demos/plaid.lisp:
+	* modules/clx/new-clx/demos/qix.lisp:
+	* modules/clx/new-clx/demos/recurrence.lisp: use it
+
+2008-06-25  Sam Steingold  <sds@gnu.org>
+
+	move WM-HINTS to C to better handle word size differences
+	* modules/clx/new-clx/clx.f (lookup_display, change_property): add
+	(CHANGE-PROPERTY): use change_property()
+	(xlib_error_handler, xlib_io_error_handler): use lookup_display()
+	(check_wmh_initial_state, check_wmh_flag): add DEFCHECKERs
+	(WM-HINTS, SET-WM-HINTS): implement
+	* modules/clx/new-clx/clx.lisp (wm-hints, set-wm-hints)
+	(decode-wm-hints, encode-wm-hints): remove
+
+2008-06-25  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/mit-clx/display.lisp (with-open-display): define
+	* modules/clx/mit-clx/package.lisp (with-open-display): export
+
+2008-06-25  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (CHANGE-PROPERTY):
+	check the return value of XChangeProperty()
+	(DISPLAY-VENDOR-NAME): return just one value
+
+2008-06-24  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (GET-PROPERTY):
+	use uint16 and uint32 instead of unsigned short and unsigned long
+	for reliability on 64-bit platforms
+
+2008-06-24  Sam Steingold  <sds@gnu.org>
+
+	* error.d (check_variable_value_replacement): move here from eval.d
+	* lispbibl.d (check_variable_value_replacement): prototype
+	* eval.d (eval1): call setq here
+	* control.d (check_global_symbol_value): remove
+	(SYMBOL-VALUE): use check_variable_value_replacement
+
+2008-06-23  Sam Steingold  <sds@gnu.org>
+
+	* eval.d (check_variable_value_replacement): extracted from eval1()
+	(eval1): use it
+	(interpret_bytecode_): use it for cod_getvalue & cod_getvalue_push
+
+2008-06-23  Sam Steingold  <sds@gnu.org>
+
+	* unix/MAGIC.add: remove non-CLISP-specific entries;
+	CLISP FASL files start with |SYSTEM|::|VERSION| since 2004-03-27
+
+2008-06-21  Sam Steingold  <sds@gnu.org>
+
+	* modules/netica/Makefile: do not use ${...-...}
+	* modules/netica/demo.lisp: test netica:read-net
+	* modules/netica/link.sh: netica 3.25 requires g++
+
+2008-06-21  Sam Steingold  <sds@gnu.org>
+
+	* io.d (pr_record_descr): use pr_symbol instead of literal ':' +
+	pr_like_symbol(Symbol_name) to print slot names so that the keywords
+	are printed as :|HOST| and not :|host| when writing a FASL file
+	in a modern package
+
+2008-06-19  Sam Steingold  <sds@gnu.org>
+
+	* modules/netica/: updated to the Netica C API version 3.25 from 2.15
+
+2008-06-17  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/posix.lisp (make-xterm-io-stream): avoid a race
+	condition [between (delete-file tmps) and (mknod tmps :FIFO :RWXU)]
+	by using mkdtemp and creating the pipe in the temporary directory;
+	accept :XTERM argument and support rxvt in addition to xterm
+
+2008-06-17  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (MKDTEMP): strip trailing slash from
+	namez because mkdtemp(".../") --> ENOENT
+
+2008-06-16  Sam Steingold  <sds@gnu.org>
+
+	* modules/rawsock/rawsock.c (RAWSOCK:NETWORK): use getnetbyaddr
+	instead of non-existent getnetbynumber
+
+2008-06-13  Sam Steingold  <sds@gnu.org>
+
+	* defmacro.lisp (make-macro-expansion): bind %proper-list-p to nil,
+	not t, to allow dotted macro forms (broken since 2006-04-15)
+
+2008-06-13  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (check_errno) [WIN32_NATIVE]:
+	#include <winerror.h>, drop prefix=ERROR,
+	and use cygwin cvs tree to define many more codes
+
+2008-06-11  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (GETHOSTID):
+	use `unsigned long' instead of non-standard `ulong'
+
+2008-06-05  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c, modules/syscalls/posix.lisp:
+	remove the GET prefix from SETFable functions
+	PGID, UID, GID, EUID, EGID, GROUPS
+
+2008-06-05  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (GETHOSTID): implement
+	* modules/syscalls/posix.lisp (gethostid): export
+
+2008-06-05  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (ERRNO): when the argument is T,
+	return all known error codes as an alist
+
+2008-06-04  Sam Steingold  <sds@gnu.org>
+
+	* calls.c (ERRNO, STRERROR) [WIN32_NATIVE]: use GetLastError(),
+	SetLastError() and FormatMessage() instead of errno and strerror
+	(check_errno) [WIN32_NATIVE]: define separately
+
+2008-06-04  Sam Steingold  <sds@gnu.org>
+
+	* inspect.lisp (get-insp): accept :w and :n
+	(print-inspection, inspect-frontend): say when more slots are available
+	(inspect): bind *INSPECT-LENGTH* so that :w & :n do not act across
+	inspect invocations
+
+2008-06-04  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (DISPLAY-GET-DEFAULT): add
+	* modules/clx/new-clx/clx.lisp (display-get-default)
+	(display-resource-manager-string, screen-resource-string): export
+
+2008-06-04  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (NO-OPERATION): return no values on
+	success and signal an error on failure
+
+2008-06-03  Sam Steingold  <sds@gnu.org>
+
+	* configure, makemake.in: pass --disable-option-checking to
+	sub-configures
+
+2008-06-03  Sam Steingold  <sds@gnu.org>
+
+	* utils/modprep.lisp (strip-comments): new function
+	(split-command): use it to support comments inside DEFCHECKERs
+
+2008-06-03  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/posix.lisp (physical-memory, *services-file*):
+	signal an error on non UNIX & Win32 platforms
+
+2008-06-03  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (FILE-OWNER): use *PATHNAME-ENCODING*
+	for the filename instead of *MISC-ENCODING*
+	(get_owner) [!HAVE_GETPWUID && !WIN32_NATIVE]: use an exhaustive
+	cpp conditioning to ensure that it is always defined
+
+2008-06-03  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (module_configure_flags): do not add
+	--with-dynamic-ffi & --with-dynamic-modules
+
+2008-06-02  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (encflags): add -Emisc 1:1 so that syscalls tests
+	pass (user names may be 8bit)
+
+2008-06-02  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (OS:ERRNO, OS:STRERROR): implement
+	* modules/syscalls/posix.lisp (OS:ERRNO, OS:STRERROR): export
+
+2008-06-02  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (IMPNOTES): rename to IMPNOTES_FILES to avoid
+	conflict with $IMPNOTES which is used by IMPNOTES-ROOT
+
+2008-06-02  Sam Steingold  <sds@gnu.org>
+
+	* condition.lisp (mecase): ECASE for DEFMACRO: print the form in
+	the error message
+	* foreign1.lisp (parse-c-function, DEF-C-VAR): use SYS::MECASE
+	instead of ECASE for a better error message
+
+2008-06-01  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (setjmp) [__MINGW32__]: define as _setjmp (but do not
+	define longjmp as _longjmp because the latter does not exist)
+	This is only necessary for lightning.
+	Thanks to Yaroslav Kavenchuk <kavenchuk@tut.by> for investigation.
+
+2008-06-01  Sam Steingold  <sds@gnu.org>
+
+	* spvw.d (init_object_tab) [WIDE_HARD]: add :WORD-SIZE=64 to *FEATURES*
+	* built.d (built_flags): show all WIDE_* variants
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/builtin_strlen.m4 (CL_BUILTIN_STRLEN): Assume ANSI C or C++.
+	* m4/mprotect.m4 (CL_MPROTECT): Likewise.
+	* m4/select.m4 (CL_SELECT): Likewise.
+	* m4/signal.m4 (CL_SIGNAL_REINSTALL, CL_SIGNAL_UNBLOCK,
+	CL_SIGNAL_BLOCK_OTHERS, CL_SIGACTION_REINSTALL, CL_SIGACTION_UNBLOCK):
+	Likewise.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove AC_HEADER_STAT invocation.
+	* unix.d: Ignore STAT_MACROS_BROKEN.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove AC_HEADER_TIME invocation. Instead simply test
+	for <time.h> and <sys/time.h>.
+	* m4/general.m4 (CL_MODULE_COMMON_CHECKS): Likewise.
+	* unix.d: Don't test TIME_WITH_SYS_TIME. Assume <time.h> and
+	<sys/time.h> are compatible.
+	* modules/berkeley-db/bdb.c: Likewise.
+	* modules/clx/new-clx/clx.f: Likewise.
+	* modules/rawsock/rawsock.c: Likewise.
+	* modules/syscalls/calls.c: Likewise.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove AC_STRUCT_TM invocation.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_PERROR invocation.
+	* _clisp.c (perror): Remove declaration fallback.
+	* win32.d (HAVE_PERROR_DECL): Remove macro.
+	* m4/perror.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/proto.m4 (CL_PROTO_RET, CL_PROTO_TRY, CL_PROTO_CONST): Remove
+	TRAD-DECL argument.
+	* m4/connect.m4 (CL_CONNECT): Update.
+	* m4/getpagesize.m4 (CL_GETPAGESIZE): Update.
+	* m4/ioctl.m4 (CL_IOCTL): Update.
+	* m4/putenv.m4 (CL_PUTENV): Update.
+	* m4/readline.m4 (CL_READLINE): Update.
+	* m4/rlimit.m4 (CL_RLIMIT): Update.
+	* m4/rusage.m4 (CL_RUSAGE): Update.
+	* m4/select.m4 (CL_SELECT): Update.
+	* m4/tcpconn.m4 (CL_TCPCONN): Update.
+	* m4/waitpid.m4 (CL_WAITPID): Update.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/termios.m4 (RL_TERM): Remove macro.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_IRIX_SUN invocation.
+	* m4/sys-irix.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_DYNIX_SEQ invocation.
+	* m4/sys-dynix.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/signal.m4 (RL_RETSIGTYPE): Remove macro.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/siginterrupt.m4 (CL_SIGINTERRUPT): Don't test for sigvec.
+	* unixaux.d (siginterrupt): Remove sigvec based emulation.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/shm-rmid.m4 (CL_SHM_RMID): Choose more distant addresses,
+	so that the test succeeds on Linux.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/select.m4 (RL_SELECT): Remove macro.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* modules/regexp/configure.in: Require autoconf >= 2.58. Invoke
+	AC_C_RESTRICT instead of gl_C_RESTRICT.
+	* m4/restrict.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_RAISE invocation.
+	* unix.d (raise): Assume 'raise' exists.
+	* spvw_sigpipe.d (sigpipe_handler): Likewise.
+	* m4/raise.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_OPENFLAGS invocation.
+	* unix.d: Assume O_RDWR etc. is defined in <fcntl.h>.
+	* m4/filecharset.m4 (CL_FILECHARSET): Likewise.
+	* m4/general.m4 (CL_FFCALL_COMMON_TRAMPOLINE): Likewise.
+	* m4/ioctl.m4 (CL_IOCTL): Likewise.
+	* m4/mmap.m4 (CL_MMAP): Likewise.
+	* m4/poll.m4 (CL_POLL): Likewise.
+	* m4/select.m4 (CL_SELECT): Likewise.
+	* m4/openflags.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_OFFSETOF invocation.
+	* m4/intparam.m4 (CL_INTPARAM_ALIGNOF): Don't require CL_OFFSETOF.
+	Include <stddef.h> always.
+	* lispbibl.d: Include <stddef.h> always.
+	(offsetof): Don't redefine, use if it is defined.
+	* m4/offsetof.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	Remove SunOS 4 support.
+	* lispbibl.d (SUN386, SUN3, UNIX_SUNOS4): Remove macros.
+	(MULTIMAP_MEMORY_VIA_FILE, hardware_addressbus_mask, SPVW_MIXED):
+	Update.
+	* unix.d: Drop UNIX_SUNOS4 conditional.
+	* spvw.d (init_memory): Likewise.
+	* misc.d (MACHINE-TYPE, MACHINE-VERSION): Likewise.
+	* _distmakefile (CC): Likewise.
+	* stream.d (MAKE-WINDOW, CLOSE-WINDOW): Drop SUN3 conditional.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	Remove NeXTstep support.
+	* SUMMARY: Remove mention of NeXTstep.
+	* lispbibl.d (UNIX_NEXTSTEP, NEXTSTEP_CHS): Remove macros.
+	* charstrg.d: Remove NEXTSTEP_CHS special casing.
+	* io.d: Likewise.
+	* eval.d (interpret_bytecode): Drop UNIX_NEXTSTEP conditional.
+	* lightning.c (LD, LR): Likewise.
+	* misc.d (MACHINE-TYPE): Likewise.
+	* spvw.d (init_memory): Likewise.
+	* unix.d: Likewise.
+
+	* nls_nextstep.c: Remove file.
+	* pseudofun.d (nls_nextstep_table): Remove.
+	* encoding.d: Don't include nls_nextstep.c.
+	(nls_tables): Remove nls_nextstep_table.
+	* constsym.d: Update.
+	* makemake.in (NLS_INCLUDES): Remove nls_nextstep.
+	* utils/unicode/Makefile (ALL): Remove nls_nextstep.c.
+	(nls_nextstep.c): Remove rule.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/gettimeofday.m4 (CL_GETTIMEOFDAY): Remove test for the prototype.
+	* unix.d (gettimeofday): Assume the declaration in <sys/time.h>.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/gethostbyname.m4 (CL_GETHOSTBYNAME): Remove test for sun/netdb.h.
+	* unix.d: When gethostbyname exists, assume <sys/socket.h> and <netdb.h>
+	exist.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_FPU_CONTROL invocation.
+	* m4/fpu_control.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_PROG_CP invocation.
+	* m4/cp.m4: Remove file.
+	* m4/ln.m4 (CL_PROG_LN): Assume "cp -p" works on Unix.
+	* makemake.in (CP): Likewise.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/closedir.m4 (CL_CLOSEDIR): Remove check for the prototype.
+	Don't define RETCLOSEDIRTYPE any more.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_VOID invocation.
+	* m4/general.m4 (CL_FFCALL_COMMON_TRAMPOLINE): Likewise.
+	* m4/cc-void.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_CC_NEED_CCPAUX invocation.
+	* m4/cc-cppaux.m4: Remove file.
+	* makemake.in (CC_NEED_CCPAUX, XCC_NEED_CCPAUX): Remove variables.
+	(*asm*.c): Fix dependency to use XASMCCPAUX.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* m4/c++-constructors.m4: Remove file.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_ACCESSFLAGS invocation.
+	* m4/access.m4: Remove file.
+	* unix.d: Assume <unistd.h> declares R_OK, W_OK, X_OK.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_ABORT invocation.
+	* m4/abort.m4: Remove file.
+	* unix.d (abort): Assume <stdlib.h> declares it.
+
+2008-05-31  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove AC_HEADER_STDC invocation.
+	* m4/general.m4 (CL_MODULE_COMMON_CHECKS): Remove AC_HEADER_STDC
+	invocation.
+	* lispbibl.d: Assume STDC_HEADERS.
+	* stream.d: Likewise.
+	* unix.d: Likewise.
+	* win32.d: Don't set STDC_HEADERS.
+	* malloc/gmalloc.c: Assume ANSI C or C++, STDC_HEADERS, memmove.
+	* unix/sigsegv.c: Assume STDC_HEADERS.
+	* modules/pcre/cpcre.c: Assume STDC_HEADERS.
+	* modules/rawsock/configure.in: Test for unistd.h.
+	* modules/rawsock/rawsock.c: Assume STDC_HEADERS.
+
+2008-05-30  Sam Steingold  <sds@gnu.org>
+
+	* m4/siginterrupt.m4: )fix a typo:
+	$ac_cv_func_strerror -> $ac_cv_func_siginterrupt
+
+2008-05-29  Bruno Haible  <bruno@clisp.org>
+
+	* configure.in: Remove CL_DIR_HEADER invocation.
+	* m4/dir.m4: Remove file.
+	* m4/closedir.m4 (CL_CLOSEDIR): Assume <dirent.h>.
+	* m4/filecharset.m4 (CL_FILECHARSET): Likewise.
+	* unix.d: Likewise.
+	(SDIRENT): Remove macro.
+	* pathname.d (directory_search_scandir): Assume <dirent.h> and
+	struct dirent.
+
+2008-05-29  Sam Steingold  <sds@gnu.org>
+
+	* m4/fenv_default.m4 (CL_FENV_CHECK): define and use everywhere
+
+2008-05-29  Sam Steingold  <sds@gnu.org>
+
+	* m4/general.m4 (CL_CHECK): extracted from ...
+	(CL_COMPILE_CHECK, CL_LINK_CHECK): use it
+
+2008-05-29  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/configure.in: add proper quoting;
+	use AC_LINK_IFELSE instead of AC_TRY_LINK;
+	use m4_define to avoid writing the same program twice
+	* m4/rusage.m4 (CL_RUSAGE): use AC_RUN_IFELSE instead of AC_TRY_RUN
+
+2008-05-29  Sam Steingold  <sds@gnu.org>
+
+	* m4/ln.m4 (CL_PROG_LN): use AC_CACHE_CHECK instead of
+	AC_MSG_CHECKING + AC_CACHE_VAL + AC_MSG_RESULT
+
+2008-05-29  Sam Steingold  <sds@gnu.org>
+
+	* m4/longdouble.m4: remove obsolete file
+	* m4/fenv_default.m4, m4/floatparam.m4, m4/intparam.m4:
+	assume 'long double' is supported,
+	use AC_COMPILE_IFELSE instead of AC_TRY_COMPILE
+
+2008-05-28  Sam Steingold  <sds@gnu.org>
+
+	* m4/sigsegv.m4: use AC_LINK_IFELSE instead of AC_TRY_LINK
+
+2008-05-28  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/clx.f (last-event-processed)
+	(last-timestamp-processed) [USE_LIBXT]: add
+
+2008-05-28  Sam Steingold  <sds@gnu.org>
+
+	* m4/isc-posix.m4: remove. The comment says:
+	This file is not needed with autoconf-2.53 and newer. Remove it in 2005.
+
+2008-05-28  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1975798 ]: parameter confusion in new Gray Streams functions
+	* gray.lisp (stream-read-sequence): fix argument order in
+	stream-read-byte-sequence and stream-read-char-sequence
+	and specify the default values for start and end
+	(stream-write-sequence): fix argument order in
+	stream-write-byte-sequence and stream-write-char-sequence
+	and specify the default values for start and end
+
+2008-05-27  Sam Steingold  <sds@gnu.org>
+
+	avoid obsolete macros
+	* m4/c++.m4, m4/general.m4: use AC_LANG_PUSH/AC_LANG_POP
+	instead of AC_LANG_SAVE/AC_LANG_RESTORE
+	* m4/cc-ema.m4: use AC_PREPROC_IFELSE instead of AC_TRY_CPP
+	* m4/c++.m4: use AC_RUN_IFELSE instead of AC_TRY_RUN and
+	AC_LINK_IFELSE instead of AC_TRY_LINK, use AC_MSG_FAILURE
+	* m4/general.m4 (CL_CPP_CHECK): remove unused macro
+	(CL_CC_WORKS): use AC_MSG_FAILURE,
+	use AC_RUN_IFELSE instead of AC_TRY_RUN
+	use AC_LINK_IFELSE instead of AC_TRY_LINK
+
+2008-05-27  Sam Steingold  <sds@gnu.org>
+
+	* eval.d (unused): undef before #include "lightning.c"
+
+2008-05-26  Sam Steingold  <sds@gnu.org>
+
+	* floatparam.c, intparam.c: write to conftest.h or first arg, not stdout
+	* m4/address.m4, m4/eloop.m4, m4/filecharset.m4, m4/param.m4:
+	use AC_RUN_IFELSE instead of undocumented AC_TRY_EVAL(ac_link)
+	* makemake.in (floatparam.h, intparam.h): update
+
+2008-05-25  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (setjmp, longjmp) [HAVE__JMP]: on all autoconf platforms
+	(UNIX & __MINGW32__), use _setjmp and _longjmp whenever they are present
+
+2008-05-25  Sam Steingold  <sds@gnu.org>
+
+	* spvw_sigint.d (signal_handler_prepare_for_lisp): extracted from
+	react_on_sigint()
+	(react_on_sigint): call it
+	* spvw_sigterm.d (quit_on_signal): ditto
+
+2008-05-25  Bruno Haible  <bruno@clisp.org>
+
+	* m4/signal.m4 (CL_SIGNALBLOCK): Remove macro.
+	(CL_SIGNAL_UNBLOCK, CL_SIGNAL_BLOCK_OTHERS, CL_SIGACTION_UNBLOCK):
+	Assume POSIX signal-blocking.
+	* unix.d (SIGNALBLOCK_POSIX): Define always.
+	* spvw.d (main): Assume SIGNALBLOCK_POSIX on Unix.
+	* spvw_sigint.d (react_on_sigint): Likewise.
+	* spvw_sigsegv.d (stackoverflow_handler): Likewise.
+	* configure.in (CL_SIGNALBLOCK): Remove invocation.
+
+2008-05-25  Bruno Haible  <bruno@clisp.org>
+
+	* floatparam.c: Remove support for K&R C compilers.
+	* intparam.c: Likewise.
+
+2008-05-23  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1970141 ]: link.sh should respect $(MAKE)
+	* makemake.in (base, full): set MAKE when calling clisp-link
+	* modules/berkeley-db/link.sh.in, modules/bindings/glibc/link.sh:
+	* modules/bindings/win32/link.sh, modules/clx/mit-clx/link.sh:
+	* modules/clx/new-clx/link.sh.in, modules/dirkey/link.sh:
+	* modules/fastcgi/link.sh, modules/gdbm/link.sh.in:
+	* modules/gtk2/link.sh.in, modules/i18n/link.sh.in:
+	* modules/libsvm/link.sh, modules/matlab/link.sh:
+	* modules/netica/link.sh, modules/oracle/link.sh:
+	* modules/pari/link.sh.in, modules/pcre/link.sh.in:
+	* modules/postgresql/link.sh.in, modules/queens/link.sh:
+	* modules/rawsock/link.sh.in, modules/readline/link.sh.in:
+	* modules/regexp/link.sh.in, modules/syscalls/link.sh.in:
+	* modules/wildcard/link.sh.in, modules/zlib/link.sh.in:
+	use ${MAKE-make} instead of make
+
+2008-05-22  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1956715 ]: segfault on SIGHUP
+	* spvw_sigterm.d (quit_on_signal) [HAVE_SAVED_STACK]: restore STACK
+
+2008-05-22  Sam Steingold  <sds@gnu.org>
+
+	* modules/regexp/configure.in: remove AM_GNU_GETTEXT([external])
+	(why was it there in the first place?!)
+
+2008-05-22  Sam Steingold  <sds@gnu.org>
+
+	* configure (--help-modules): more compact output,
+	do not print anything for modules whose configure
+	does not accept any --with.*prefix arguments
+
+2008-05-21  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (POSIX::RESOLVE-HOST-IPADDR):
+	call sethostent() before the gethostent() iteration
+
+2008-05-20  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (FREOPEN): fix stack access
+	include <fcntl.h> before DEFMODULE so that DEFCHECKERs work
+	(pid_to_I, I_to_pid, uid_to_I, I_to_uid, gid_to_I, I_to_gid): POSIX
+	specifies that pid_t is signed, assume that the others are signed too
+	http://www.opengroup.org/onlinepubs/009695399/basedefs/sys/types.h.html
+
+2008-05-20  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1966714 ]: invalid syntax in top-level configure
+	* configure (passnext): support non-POSIX /bin/sh on Solaris
+
+2008-05-19  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c: move DEFMODULE et al outside of the
+	file locking conditional
+
+2008-05-19  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (%FGETC, %FPUTC, %UNGETC): add for testing
+
+2008-05-19  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (mark_fp_valid): export to clisp.h
+	* modules/syscalls/calls.c (%STDIO, my_stdin, my_stdout)
+	(my_stderr, init_stdio) [HAVE_FFI]: add
+	(module__syscalls__init_function_2) [HAVE_FFI]: call init_stdio()
+	* modules/syscalls/posix.lisp (stdin, stdout, stderr) [FFI]: defconstant
+
+2008-05-19  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (FREOPEN): implement
+	* modules/syscalls/posix.lisp (freopen): export
+
+2008-05-18  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1966375 ]: no tgamma on solaris
+	* modules/syscalls/posix.lisp (tgamma): if tgamma is not defined,
+	define it using lgamma
+	* modules/syscalls/calls.c (tgamma) check HAVE_TGAMMA
+
+2008-05-16  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (upload-sunsite): remove target
+	* clisp.lsm: remove file
+
+2008-05-16  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (upload-sf): use rsync instead of ftp because of
+	the change in the SF FRS (File Release System)
+
+2008-05-15  Sam Steingold  <sds@gnu.org>
+
+	* configure: do not pass --with-module to subdir configures
+	(starting with autoconf 2.62 this results in warnings)
+
+2008-05-15  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: 2.46 (2008-07-07) [+ gnulib-imported build-aux-update]
+
+2008-05-15  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (fixperms): also fix web pages permissions
+	* utils/fix-perms.sh: accept command line argument ROOT
+
+2008-05-15  Reini Urban  <rurban@x-ray.at>
+
+	* modules/clx/new-clx/clx.f [__CYGWIN__]: include <X11/Xwindows.h>
+	first thing to avoid conflicts with INT32,BOOL defined in
+	<windows.h> included from clisp.h
+
+2008-05-15  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (doc-distrib): exclude *~ and .#*
+
+2008-05-15  Sam Steingold  <sds@gnu.org>
+
+	* 2.45 tagged and released
+
+2008-05-14  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (GETPPID): implement
+	* modules/syscalls/posix.lisp (getppid): export
+	* modules/syscalls/configure.in (getppid): test
+
+2008-05-13  Bruno Haible  <bruno@clisp.org>
+
+	* m4/pkg.m4: New file, from pkg-config-0.23.
+
+2008-05-13  Bruno Haible  <bruno@clisp.org>
+
+	* m4/bold.m4 (BOLD_MSG): Fix underquoting.
+
+2008-05-13  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (SETREUID, SETREGID, TGAMMA): implement
+	* modules/syscalls/configure.in (setreuid, setregid, tgamma): check
+	(signgam): fix test
+	* modules/syscalls/posix.lisp (setreuid, setregid, tgamma): export
+
+2008-05-13  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (USER-INFO): use I_to_uid instead of
+	I_to_uint32; when getlogin() fails, signal an error instead of
+	defaulting to getuid()
+
+2008-05-12  Bruno Haible  <bruno@clisp.org>
+
+	Clear spurious error messages on MacOS X 10.5.
+	* m4/address.m4 (CL_ADDRESS_RANGE): Remove conftest.dSYM directory
+	before conftest* files.
+	* m4/eloop.m4 (CL_ELOOP): Likewise.
+	* m4/filecharset.m4 (CL_FILECHARSET): Likewise.
+	* m4/param.m4 (CL_MACHINE): Likewise.
+
+2008-05-12  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (tp-mail): put clisp version into the subject line
+
+2008-05-12  Sam Steingold  <sds@gnu.org>
+
+	* foreign.d (convert_to_foreign): accept Fpointer as a C-POINTER
+	so that POSIX:FOPEN value can actually be used by FFI
+
+2008-05-11  Sam Steingold  <sds@gnu.org>
+
+	* comptran.d (N_log_abs_R): fix a GC-safety bug (R_R_comp -
+	comparison! - turned out to maygc)
+
+2008-05-10  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1961475 ]: Hang on read-char-no-hang
+	* stream.d (listen_char_buffered): when the next byte is '\n' and
+	ChannelStream_ignore_next_LF is true, discard it and retry
+
+2008-05-10  Sam Steingold  <sds@gnu.org>
+
+	* clos-genfun4.lisp (no-next-method): signal
+	SYS::SIMPLE-PROGRAM-ERROR instead of PROGRAM-ERROR because only
+	the former accepts :FORMAT-CONTROL & :FORMAT-ARGUMENTS
+
+2008-05-10  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/configure.in: when testing for
+	XauGetAuthByAddr, must #include <X11/Xauth.h> for g++
+
+2008-05-09  Sam Steingold  <sds@gnu.org>
+
+	* describe.lisp (clisp-data-file): put the error message through i18n
+
+2008-05-09  Sam Steingold  <sds@gnu.org>
+
+	* condition.lisp (coerce-to-condition): use ERROR instead of
+	SIGNAL to report TYPE-ERROR so that COERCE-TO-CONDITION never
+	returns NIL (http://article.gmane.org/gmane.lisp.clisp.general/12208)
+
+2008-05-09  Sam Steingold  <sds@gnu.org>
+
+	* trace.lisp (trace, untrace): turn comments into doc strings
+
+2008-05-08  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/configure.in: check size of pid_t
+	* modules/syscalls/calls.c (GETTER, SETTER): move up in file
+	(pid_to_I, I_to_pid): define based on SIZEOF_PID_T
+	(GETSID, SETPGRP, SETPGID, KILL): use the above
+	(GETTER1): add
+	(GETSID): use it
+	(SETPGID): replace with POSIX::%SETPGID
+	(GETPGID): add
+	* modules/syscalls/posix.lisp (GETPGID): add DEFSETF
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: 2.45 (2008-05-15)
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	* m4/ffcall.m4 (CL_FFCALL): suggest passing --host=... to the
+	FFCALL configure if $ac_cv_build != $ac_cv_host
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	* configure: accept --cbc to mean Configure/Build/Check and
+	--build to mean the build host (the usual autoconf meaning)
+	* makemake.in: rely on configure for cross-compilation too
+	(EXTRAOBJ) [CROSS]: add gllib/malloc
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (MYIMPROOT): use beta pages for the latest id-href.map
+	(check-doc): use base, not boot, for better symbol coverage
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	* describe.lisp (describe-object@symbol) [FFI]:
+	print foreign type information
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (encflags): ' -E UTF-8 -Epathname 1:1':
+	UTF-8 for files, terminal, wildcard test
+	1:1 for pathname
+
+2008-05-07  Reini Urban  <rurban@x-ray.at>
+
+	* modules/syscalls/calls.c (FMTID_SummaryInformation)
+	(FMTID_UserDefinedProperties): enable also on UNIX_CYGWIN32
+
+2008-05-07  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1959436 ]: Allow ending http_proxy with a slash
+	* clhs.lisp (http-proxy): handle the trailing slash
+
+2008-05-07  Reini Urban  <rurban@x-ray.at>
+
+	* modules/syscalls/calls.c (FILE_FUNCTION, CLEARERR): fix g++ and
+	cygwin compilation by casting the pointers to (FILE*)
+
+2008-05-06  Bruno Haible  <bruno@clisp.org>
+
+	* clos-specializer2.lisp (reinitialize-instance@specializer): Change
+	error message.
+
+2008-05-06  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (FFLUSH): add
+	* modules/syscalls/posix.lisp (fflush): export
+	(FILENO, FEOF, FERROR, FCLOSE): check return values
+
+2008-05-06  Sam Steingold  <sds@gnu.org>
+
+	* clos-class3.lisp, clos-genfun3.lisp, clos-methcomb2.lisp,
+	* describe.lisp, foreign1.lisp, reploop.lisp:
+	various small i18n message fixes
+
+2008-05-05  Sam Steingold  <sds@gnu.org>
+
+	* clos-genfun3.lisp (analyze-defgeneric): do not pass through
+	gettext messages which contain no text, just format directives
+	* clos-method2.lisp (program-error-reporter)
+	(analyze-method-description): ditto
+
+2008-05-05  Sam Steingold  <sds@gnu.org>
+
+	* format.lisp (format-not-both-error): replaces format-conditional-error
+	(format-parse-cs, format-conditional, formatter-main-1): use it
+
+2008-05-05  Sam Steingold  <sds@gnu.org>
+
+	* clos-slotdef1.lisp, compiler.lisp, lambdalist.lisp, trace.lisp:
+	* clos-method1.lisp, clos-methcomb2.lisp: more uniform i18n messages
+
+2008-05-03  Sam Steingold  <sds@gnu.org>
+
+	* foreign.d (check_fvar_alignment): add
+	(FOREIGN-VARIABLE, %OFFSET, FOREIGN-ALLOCATE): use it
+
+2008-05-03  Sam Steingold  <sds@gnu.org>
+
+	* charstrg.d, compiler.lisp, debug.d, defmacro.lisp, error.d:
+	* funarg.d, record.d, sequence.d: tweak i18n messages
+
+2008-05-02  Sam Steingold  <sds@gnu.org>
+
+	* defs2.lisp (dispatch-reader): fix message
+	* io.d (read_macro): ditto
+	* pathname.d (SYS::LIB-DIRECTORY): ditto
+
+2008-05-01  Sam Steingold  <sds@gnu.org>
+
+	* utils/fix-perms.sh: *.xsl & *.css are not executable
+
+2008-05-01  Sam Steingold  <sds@gnu.org>
+
+	* macros1.lisp (*suppress-similar-constant-redefinition-warning*):
+	new user variable
+	(defconstant): pass ,initial-var to constant-warning
+	(constant-warning): accept 3rd variable and respect
+	*suppress-similar-constant-redefinition-warning*
+	* constobj.d (version): bump, because constant-warning is ABI
+
+2008-04-30  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1928759 ]: (format nil "~8e" .999999d0) => " 10.0d-1"
+	* format.lisp (format-float-for-e): when format-float-to-string
+	rounds up above 1, adjust everything
+
+2008-04-23  Sam Steingold  <sds@gnu.org>
+
+	* fill-out.lisp (stream-start-s-expression@t): return
+	*PRINT-RIGHT-MARGIN*, just like in format.lisp
+
+2008-04-23  Sam Steingold  <sds@gnu.org>
+
+	* spvw_language.d (clisp_gettext): the common part of ...
+	(clgettext, clgettextl): use it
+
+2008-04-23  Sam Steingold  <sds@gnu.org>
+
+	* clhs.lisp (documentation@symbol@impnotes): look into impnotes
+	for CUSTOM symbols too, so that (documentation 'impnotes-root
+	'sys::impnotes) works
+
+2008-04-23  Sam Steingold  <sds@gnu.org>
+
+	followup to the 2008-04-08 patch which broke log for very small numbers
+	* comptran.d (N_log_abs_R): avoid the log(1 + (x^2 + y^2 - 1))
+	trick for small numbers
+	* realtran.d (ln2_F_float_F): use F_lnx1_F instead of F_lnx_F
+	(F_lnx_F): move most of the calculation from R_ln1_R here
+	(R_ln1_R): use either F_lnx1_F (small arg) or F_lnx_F (others)
+	(R_ln_R): do not call R_ln1_R, call F_lnx_F directly
+
+2008-04-22  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (installdirs, install-bin, uninstall): pass DESTDIR
+	to make in po
+	* po/Makefile.in.in (install-data-yes, installdirs): respect DESTDIR
+	* configure: do not try to link po twice
+
+2008-04-22  Sam Steingold  <sds@gnu.org>
+
+	* arilev1.d, hashtabl.d, lisparit.d, lispbibl.d, misc.d:
+	* pathname.d, spvw.d, spvw_garcol.d, spvw_memfile.d, time.d, unix.d:
+	* xthread.d, modules/berkeley-db/bdb.c:
+	"#error" does not need quotes around the message
+
+2008-04-17  Sam Steingold  <sds@gnu.org>
+
+	simplify support for FFI modules which want to use stdio.h
+	* lispbibl.d (HAVE_FFI): export to clisp.h
+	* foreign.d (init_ffi): register size_t and ssize_t
+	* foreign1.lisp (size_t, ssize_t, FILE): add types
+	* modules/bindings/glibc/linux.lisp ((size_t, ssize_t): do not redefine
+	* modules/pari/pari.lisp (allocatemoremem): use size_t
+	* modules/postgresql/postgresql.lisp (size_t): do not redefine
+	(PQtrace, PQprint, PQdisplayTuples, PQprintTuples):
+	use FILE instead of c-pointer
+	* modules/syscalls/calls.c (fopen, fdopen, fclose)
+	(clearerr, feof, ferror, fileno) [HAVE_FFI]: implement
+	* modules/syscalls/posix.lisp (fopen, fdopen, fclose)
+	(clearerr, feof, ferror, fileno) [FFI]: export
+
+2008-04-17  Sam Steingold  <sds@gnu.org>
+
+	* modules/bindings/glibc/linux.lisp (FILE): define to c-pointer,
+	use for all FILE functions instead of c-pointer
+
+2008-04-17  Sam Steingold  <sds@gnu.org>
+
+	* modules/postgresql/postgresql.lisp: sync with libpq-fe.h 1.141 (8.3)
+	(PQconnectionNeedsPassword, PQconnectionUsedPassword, PQisthreadsafe)
+	(PQnparams, PQparamtype, PQdescribePrepared, PQdescribePortal)
+	(PQsendDescribePrepared, PQsendDescribePortal, PQescapeStringConn)
+	(PQescapeByteaConn, lo_create, lo_truncate, PQencryptPassword)
+	(pg_char_to_encoding, pg_encoding_to_char) [commented out for 8.1.4]
+	(pg_valid_server_encoding_id): add
+	sync with postgres_ext.h 1.17 (8.3)
+	(PG_DIAG_SEVERITY, PG_DIAG_SQLSTATE, PG_DIAG_MESSAGE_PRIMARY)
+	(PG_DIAG_MESSAGE_DETAIL, PG_DIAG_MESSAGE_HINT)
+	(PG_DIAG_STATEMENT_POSITION, PG_DIAG_INTERNAL_POSITION)
+	(PG_DIAG_INTERNAL_QUERY, PG_DIAG_CONTEXT, PG_DIAG_SOURCE_FILE)
+	(PG_DIAG_SOURCE_LINE, PG_DIAG_SOURCE_FUNCTION): add
+	* modules/postgresql/configure.in: check for the new functions
+
+2008-04-16  Sam Steingold  <sds@gnu.org>
+
+	* debug.d (read_form): pass the remainder of the input line to the
+	command function
+	* reploop.lisp (debug-reset-io, debug-help, debug-unwind, debug-quit)
+	(debug-mode, debug-where, debug-up, debug-top, debug-down, bottom)
+	(debug-frame-limit, debug-backtrace, debug-trap-on, debug-trap-off)
+	(debug-redo, return, debug-continue, debug-print-error)
+	(debug-inspect-error): accept the argline argument
+	(debug-mode-[12345], get-frame-limit, debug-backtrace-[12345]): remove
+	(wrap-user-commands): pass argline to user function
+	(commands1, commands4): update
+	(break-loop): pass argline to the restart caller
+
+2008-04-16  Sam Steingold  <sds@gnu.org>
+
+	* reploop.lisp (break-loop): bind *saved-debug-package* &
+	*saved-debug-readtable* so that only that binding is modified by
+	debug-reset-io, not the global sane values
+
+2008-04-14  Sam Steingold  <sds@gnu.org>
+
+	* modules/dirkey/dirkey1.lisp: do not re-export LDAP functions from EXT
+
+2008-04-14  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1942246 ]: (coerce 1 '(double-float 0d0)) fails
+	* predtype.d (COERCE): when result_type is a list, pass its CAR to
+	coerce_float() instead of the whole list
+
+2008-04-14  Sam Steingold  <sds@gnu.org>
+
+	* stream.d (sec_usec_number): usec should be _divided_ by 1000000,
+	not multiplied by it
+	* modules/syscalls/calls.c (rusage_to_lisp): add,
+	use sec_usec_number() instead of C arithmetics
+	(USAGE): use it instead of GETRU
+
+2008-04-09  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d: g++ 4.2.* and 4.3.0 are not supported due to g++ bug 35708
+
+2008-04-08  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1934968 ]: log(complex) sometimes inaccurate
+	* comptran.d (R_R_norm2_1_R): new function
+	(N_log_abs_R): use it together with R_ln1_R
+	* realtran.d (F_lnx1_F): converted from F_lnx_F to accept y=x-1
+	(F_lnx_F): use F_lnx1_F
+	(R_ln1_R): converted from R_ln_R to accept y=x-1
+	(R_ln_R): use R_ln1_R
+
+2008-04-07  Sam Steingold  <sds@gnu.org>
+
+	partially fix bug #[ 1934968 ]: log(complex) sometimes inaccurate
+	* comptran.d (N_log_abs_R): new function: compute (log (abs z))
+	without using hypot, thus avoiding a square root
+	(N_log_N, N_N_log_N): use it
+
+2008-04-06  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1936255 ]: COMPILE discards MACRO doc strings
+	* compiler.lisp (generatedp): handle lambda lists from macroexpanders
+
+2008-04-06  Sam Steingold  <sds@gnu.org>
+
+	* describe.lisp (describe-object): update slot access of
+	FOREIGN-VARIABLE and FOREIGN-FUNCTION for the fv_version/ff_version
+	* documentation.lisp (set-function-documentation): ff_properties is 6
+	* foreign1.lisp (foreign-function-in-arg-count): ff_argtypes is 4
+
+2008-04-03  Sam Steingold  <sds@gnu.org>
+
+	* lisparit.d, intprint.d (UDS_to_DIGITS): rename to UDS_to_digits
+	(DIGITS): rename to digits_t
+	(power_table_entry): rename to power_table_entry_t
+
+2008-04-03  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1790496 ]: float format directive ~ve prints spurious digits
+	* lisparit.d (FLOAT-SCALE-EXPONENT): implement
+	* constsym.d, subr.d (float_scale_exponent): declare
+	* format.lisp (format-scale-exponent-aux, format-scale-exponent): remove
+	(format-float-for-e, format-general-float): use
+	FLOAT-SCALE-EXPONENT instead of FORMAT-SCALE-EXPONENT
+
+2008-04-02  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1928735 ]: BIGNUM failure
+	* intread.d (DIGITS_to_I): drop leading 0s; be extra permissive in the
+	initial length check, but perform an overflow check on each erg_len
+	increment
+
+2008-04-02  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (interpreted.mem, halfcompiled.mem): work around an
+	msys "feature": ":" after "/" is converted to a ";"
+
+2008-04-02  Vladimir Volovich  <vvv2@users.sourceforge.net>
+	Sam Steingold  <sds@gnu.org>
+
+	* makemake.in: quote arguments of "test -n" (fix bug #[ 1932548 ])
+
+2008-04-01  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1931097 ]: cross-compile mode tries to execute intparam
+	* makemake.in (PARAMS) [CROSS]: use touch, not executables, for
+	intparam and floatparam because the constants are defined in config.h
+	(UTILCC) [CROSS]: define to cc instead of $(CC) because the
+	utilities (gctrigger et al) must run locally
+
+2008-04-01  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1931101 ]: new-clx QUERY-COLORS wants colors not pixels
+	* modules/clx/new-clx/clx.f (XLIB:QUERY-COLORS): expect pixel sequence
+	(coerce_into_color): just fill pixels
+
+2008-03-31  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1929516 ]: m4:CL_INTPARAM_ALIGNOF loops infinitely when
+	cross-compiling
+	* m4/intparam.m4 (CL_INTPARAM_ALIGNOF): require CL_OFFSETOF and
+	include <stddef.h> so that offsetof is defined
+	(CL_INTPARAM_CROSS): disable [void (*)(void)] because compilation
+	fails, while the results are never used
+
+2008-03-30  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1929496 ]: cosmetic informational message fix
+	* m4/param.m4: set cl_machine_file_h before the cross_compiling test
+	so that it is defined in both branches
+
+2008-03-30  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c (GETGROUPS, %SETGROUPS): implemented
+	* modules/syscalls/posix.lisp (GETGROUPS): export, add DEFSETF
+	* modules/syscalls/configure.in: check for getgroups and setgroups
+	* lispbibl.d (llength1): export to clisp.h
+
+2008-03-29  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1928920 ]: missing quotes in shell code for test invocation
+	* m4/intparam.m4: use ac_cv_type_long_long_int
+	instead of the obsolete ac_cv_type_long_long
+
+2008-03-28  Yann Dauphin  <yann-nicolas.dauphin@polymtl.ca>
+	Sam Steingold  <sds@gnu.org>
+
+	* spvw_gcmark.d (down_sxrecord) [USE_JITC]: when gc_drop_jitc,
+	replace cclosure_jitc with NIL
+
+2008-03-27  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1683394 ]: TANH floating point overflow for large floats
+	* realtran.d (posF_tanh_posF): new function: 1-exp(-2x)/1+exp(-2x)
+	(R_tanh_R): use it instead of R_cosh_sinh_R_R when |x|>=1
+
+2008-03-25  Sam Steingold  <sds@gnu.org>
+
+	* array.d, control.d, debug.d, eval.d, execname.c, hashtabl.d:
+	* io.d, lisparit.d, lispbibl.d, list.d, package.d, pathname.d:
+	* predtype.d, record.d, sequence.d, spvw.d, spvw_circ.d:
+	* spvw_debug.d, spvw_garcol.d, spvw_language.d, spvw_memfile.d:
+	* stream.d, weak.d: add extra braces to work around the g++ 4.2
+	error "jump to label ... crosses initialization of ..."
+
+2008-03-25  Sam Steingold  <sds@gnu.org>
+
+	* m4/cc-sunpro.m4: new file, define CL_CC_SUNPRO
+	* configure.in: call CL_CC_SUNPRO
+	* makemake.in: use CC_SUNPRO, set by CL_CC_SUNPRO, to detect
+	SUN SUNWspro C compiler (instead of "$CC -flags")
+	Reported by Vladimir Volovich <vvv2@users.sourceforge.net>
+
+2008-03-25  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1924501 ]: cannot find gllib include
+	* makemake.in (CPPFLAGS): pass -Igllib here, not CFLAGS
+
+2008-03-24  Vladimir Volovich  <vvv2@users.sourceforge.net>
+	Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1924508 ]: undefined symbol getSP when linking lisp.run
+	on Sparc Solaris 2.8 using Sun Studio 11
+	* spsparc.d, spsparc64.d: add global getSP
+
+2008-03-24  Sam Steingold  <sds@gnu.org>
+
+	fix bug #[ 1924506 ]: void function cannot return value
+	* foreign.d (convert_to_foreign): "return void" does not work on
+	Solaris 2.8
+
+2008-03-24  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d (NULL): #undef before defining
+	to avoid "warning: macro redefined: NULL"
+
+2008-03-24  Sam Steingold  <sds@gnu.org>
+
+	* gray.lisp (stream-read-sequence): define methods for
+	fundamental-binary-input-stream & fundamental-character-input-stream
+	(stream-write-sequence): define methods for
+	fundamental-binary-output-stream & fundamental-character-output-stream
+
+2008-03-23  Sam Steingold  <sds@gnu.org>
+
+	implemented GRAY:STREAM-READ-SEQUENCE and GRAY:STREAM-WRITE-SEQUENCE
+	* defs2.lisp (%read-sequence): rename from READ-SEQUENCE
+	(read-sequence): call it or GRAY::STREAM-READ-SEQUENCE
+	(%write-sequence): renamed from WRITE-SEQUENCE
+	(write-sequence): call it or GRAY::STREAM-WRITE-SEQUENCE
+	* gray.lisp (stream-read-sequence, stream-write-sequence): implemented
+	Suggested by Anton Vodonosov <avodonosov@yandex.ru>.
+
+2008-03-21  Sam Steingold  <sds@gnu.org>
+
+	* lispbibl.d, debug.d (gdb_show_stack): renamed from ext_show_stack
+	* lispbibl.d (gdb_disassemble_closure): add protorype
+	* debug.d (gdb_disassemble_closure): implement
+	* constsym.d (disassemble_closures): add
+
+2008-03-21  Sam Steingold  <sds@gnu.org>
+
+	* eval.d (cclosure_run) [USE_JITC]: new local inline
+	(interpret_bytecode) [USE_JITC]: use it instead of explicit code
+	* lightning.c: use it instead of interpret_bytecode_()
+
+2008-03-19  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (XCFLAGS) [XCC_GCC]: add -falign-functions=4 on all
+	CPUs - it cannot hurt and is required at least on AMD64
+
+2008-03-18  Sam Steingold  <sds@gnu.org>
+
+	* lightning.c: use jit_movi_p instead of jit_movi_l for pointers
+	to avoid "warning: cast from pointer to integer of different size"
+
+2008-03-18  Sam Steingold  <sds@gnu.org>
+
+	* stream.d (push_ch): extracted from read_line
+	(read_line): use it
+	* spvw_debug (nobject_out1): handle arrays
+
+2008-03-18  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in, lispbibl.d: USE_JITC requires HEAPCODES
+
+2008-03-18  Drutsa Pavel  <rawlik@users.sourceforge.net>
+
+	fix bug #[ 1918017 ]: new-clx:gcontext-clip-mask does not set rectangles
+	* modules/clx/new-clx/clx.f (XLIB:SET-GCONTEXT-CLIP-MASK): do not
+	divide n by 4 when passing to XSetClipRectangles - it has already
+	been done by get_seq_len()
+
+2008-03-17  Sam Steingold  <sds@gnu.org>
+
+	* lightning.c (jit_compile_): restore the semantics of byteptr_min
+	as in interpret_bytecode_() (fixes --with-debug compilation)
+
+2008-03-17  Sam Steingold  <sds@gnu.org>
+
+	drop JITC objects before saving memory
+	* debug.d (GC): accept optional argument to invalidate JITC objects;
+	return 3 values (same as %ROOM)
+	* subr.d (gc): update declaration
+	* lightning.c (gc_drop_jitc): add variable
+	* spvw_garcol.d (gar_col): accept level argument to invalidate
+	JITC objects (when 1, set gc_drop_jitc to true)
+	* lispbibl.d (gar_col): update prototype
+	(gc_drop_jitc) [USE_JITC]: declare extern
+	* pathname.d (SAVEMEM): pass 1 to gar_col()
+	* spvw_memfile.d (savemem): pass 1 to gar_col()
+	* spvw_allocate.d (make_space_gc, make_space_gc_true)
+	(make_space_gc_false): pass 0 to gar_col()
+	* spvw_gcmark.d (down_cclosure) [USE_JITC]: do not mark JITC when
+	gc_drop_jitc is true
+
+2008-03-17  Sam Steingold  <sds@gnu.org>
+
+	* foreign1.lisp (DEF-C-CONST): pass NIL as version to
+	FIND-FOREIGN-FUNCTION (finish patch [ 1913831 ])
+	* foreign.d (foreign_library_check): when version is non-NIL,
+	coerce it to simple-string
+	* documentation.lisp (function-documentation): foreign-function
+	properties are now in slot 6
+
+2008-03-17  Sam Steingold  <sds@gnu.org>
+
+	* spvw_gcmark.d (down_cclosure) [USE_JITC]: check that the
+	cclosure has been already JIT-compiled before gc_mark_jitc_object()
+	Reported by Yann Dauphin <yann-nicolas.dauphin@polymtl.ca>
+	* lightning.c (next_byte) [FAST_DISPATCH]: undefine to avoid
+	error: 'cod_labels' undeclared
+
+2008-03-16  Sam Steingold  <sds@gnu.org>
+
+	* lightning.c (DEBUG_CHECK_BYTEPTR): do not redefine
+	(jitc_jmp_cons_): replace with struct jitc_insn_list in a more C style
+	* makemake.in [with_jitc=lightning]: compile eval.c with -Wno-unused
+	* .gdbinit (build-id-verbose): do not set (not needed
+	since gdb-6.6-45.fc8)
+
+2008-03-13  Yann Dauphin  <yann-nicolas.dauphin@polymtl.ca>
+
+	* eval.d, lightning.c: cleanup: avoid using Lisp objects with malloc,
+	use jitc_ prefix for macros defined in CLISP to separate from the
+	system code
+
+2008-03-15  Sam Steingold  <sds@gnu.org>
+
+	patch #[ 1913831 ]: dlvsym support in FFI
+	* lispbibl.d (Fvariable): add field fv_version
+	(Ffunction): add field ff_version
+	* io.d (pr_orecord): print foreign variable and function version
+	* foreign.d (error_version_nonlibrary, find_name_version): add
+	(foreign_library_variable, FIND-FOREIGN-VARIABLE)
+	(foreign_library_function, FIND-FOREIGN-FUNCTION)
+	(object_handle, object_address, foreign_library_check): accept VERSION
+	(update_library): handle versioned objects
+	* foreign1.lisp (def-call-out, def-c-var): accept :VERSION
+	* subr.d (find_foreign_variable): accept 5 arguments
+	(find_foreign_function): accept 6 arguments
+	* m4/dynload.m4 (CL_DYNLOAD): check for dlvsym
+	Suggested by Kaz Kylheku <kkylheku@gmail.com>.
+
+2008-03-14  Sam Steingold  <sds@gnu.org>
+
+	* m4/ffcall.m4 (CL_FFCALL): do not nest AC_CACHE_CHECK
+
+2008-03-13  Sam Steingold  <sds@gnu.org>
+
+	* m4/ffcall.m4 (CL_FFCALL): reinstate AC_CACHE_CHECK,
+	restore LIBS after a failed test
+
+2008-03-12  Sam Steingold  <sds@gnu.org>
+
+	* glm4/lib-link.m4: updated from gnulib, discarding my changes
+	* m4/ffcall.m4 (CL_FFCALL): updated for the new AC_LIB_LINKFLAGS
+
+2008-03-12  Sam Steingold  <sds@gnu.org>
+
+	* foreign.d (FOREIGN-POINTER-INFO): add interface to dladdr()
+	* constsym.d, subr.d (foreign_pointer_info): declare
+	* m4/dynload.m4 (CL_DYNLOAD): check for dladdr()
+	* foreign1.lisp (FOREIGN-POINTER-INFO): export
+
+2008-03-12  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (clean4): also remove ${SUBDIRS} (gllib)
+
+2008-03-12  Sam Steingold  <sds@gnu.org>
+
+	* modules/clx/new-clx/configure.in: fix last patch: cannot nest
+	AC_TRY_LINK; fail if XauGetAuthByAddr was not found
+	also define HAVE_XGETATOMNAMES when XGetAtomNames is present (4y late!)
+
+2008-03-12  Reini Urban  <rurban@x-ray.at>
+
+	* modules/clx/new-clx/configure.in: explicit check for -lXau,
+	needed at least for cygwin
+
+2008-03-11  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (TAGS, tags): new targets
+
+2008-03-11  Sam Steingold  <sds@gnu.org>
+
+	* version.sh: 2.45 (2008-04-04)
+
+2008-03-11  Sam Steingold  <sds@gnu.org>
+
+	keep in our cvs some externally maintained files - because
+	requiring ./autogen.sh after cvs co is outrageous
+	* autogen.sh: remove
+	* Makefile.devel (build-aux-update): update ltmain.sh,
+	libtool.m4 (from libtool 2.2) and gtk-2.0.m4 (from gtk2 svn) here
+	(gnulib-imported): decouple from build-aux-update
+
+2008-03-10  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (c-form-table): SORT & STABLE-SORT -> c-SORT
+	(c-SORT): new function (check arg order, map STABLE-SORT to SORT)
+	* eval.d (FUNTAB): remove stable_sort, add symbol_macro_expand
+	* constobj.d (version): bump
+
+2008-03-10  Sam Steingold  <sds@gnu.org>
+
+	thread safety: remove static variables
+	* pathname.d (struct file_status): new struct type
+	(file_status_init): new function
+	(assure_dir_exists): accept a pointer to struct file_status
+	instead of using STACK_0; return the value in struct file_status
+	(assume_dir_exists): remove
+	(file_exists): use struct file_status instead of a global static
+	(true_namestring): accept struct file_status, do not modify STACK
+	(TRUENAME, PROBE-FILE, DELETE-FILE, rename_file, open_file, CD)
+	(FILE-WRITE-DATE, EXECUTE): update true_namestring invocations
+	(open_input_file, with_stat_info_computed): accept struct file_status
+	(get_time_size): accept pathname directly without STACK
+	(with_stat_info): remove
+	(with_stat_info_arg): rename to with_stat_info
+	(directory_search_scandir, directory_search, shorter_directory):
+	update the assure_dir_exists invocations
+
+2008-03-09  Sam Steingold  <sds@gnu.org>
+
+	* pathname.d (assure_dir_exists) [WIN32_NATIVE]:
+	move some code outside of with_sstring_0()
+	(assume_dir_exists): local, not global
+	* lispbibl.d (assume_dir_exists): remove prototype
+	* stream.d (finish_output_buffered): remove "#if 0" code which used
+	assume_dir_exists()
+
+2008-03-06  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (c-GLOBAL-FUNCTION-CALL): treat SYS::%UNBOUND using ...
+	(function-code-list): SYS::%UNBOUND --> ((PUSH-UNBOUND 1) (POP))
+	* clos-class6.lisp, clos-genfun1.lisp, clos-method1.lisp:
+	pass (SYS::%UNBOUND) as the first argument to EQ so save one
+	bytecode instruction (since this involves an internal CLISP
+	function, it does not warrant a general optimization in c-EQ)
+
+2008-03-05  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (l-constantp, c-constantp): hash tables are constants
+	(c-constant-value): handle hash tables; check for unhandled types
+
+2008-03-05  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (c-VAR): when the variable is a constant,
+	make anode foldable
+	(c-GLOBAL-FUNCTION-CALL): fold some calls (NULL/CONSP/XOR...)
+
+2008-03-03  Sam Steingold  <sds@gnu.org>
+
+	c-NORMAL-FUNCTION-CALL can now fold calls
+	* compiler.lisp (try-constant-fold): extracted from
+	c-DIRECT-FUNCTION-CALL
+	(return-if-foldable): new macro, uses try-constant-fold
+	(c-NORMAL-FUNCTION-CALL, c-DIRECT-FUNCTION-CALL): use it
+	(function-code-list): extracted from c-GLOBAL-FUNCTION-CALL
+	(c-GLOBAL-FUNCTION-CALL): use it
+	(collect-arg, collect-args): add
+	(c-NORMAL-FUNCTION-CALL, c-DIRECT-FUNCTION-CALL)
+	(c-GLOBAL-FUNCTION-CALL): use them
+	* record.d, subr.d (%UNBOUND): seclass_read, not seclass_foldable,
+	because (const-value (new-const #<unbound>)) is NIL
+
+2008-03-03  Sam Steingold  <sds@gnu.org>
+
+	* hashtabl.d, subr.d (GETHASH): seclass_read, not seclass_default
+
+2008-03-02  Sam Steingold  <sds@gnu.org>
+
+	* defs2.lisp (define-hash-table-test): use check-symbol
+
+2008-03-02  Sam Steingold  <sds@gnu.org>
+
+	* makemake.in (check-recompile): do not specify file name in "-o",
+	just the directory
+
+2008-03-02  Sam Steingold  <sds@gnu.org>
+
+	* .gdbinit (build-id-verbose): set to 0 to avoid fedora yum messages
+	(main_actions): silent break to call check_funtab()
+
+2008-03-01  Sam Steingold  <sds@gnu.org>
+
+	* clos-genfun4.lisp (check-gf-lambda-list): new function
+	(generic-function-argument-precedence-order, generic-function-argorder)
+	(generic-function-lambda-list, generic-function-signature): use it
+
+2008-02-29  Sam Steingold  <sds@gnu.org>
+
+	* analyse-funtab.lisp: new file: study which functions should be
+	added to eval.d:FUNTAB
+	* eval.d (FUNTAB): add check_function_name, typep_class,
+	defined_class_p, proper_list_p, pcompiled_function_p, make_macro,
+	macrop, macro_expander, symbol_macro_p, standard_instance_access,
+	set_standard_instance_access, encodingp
+	(FUNTABR): add mapcap
+	* constobj.d (version): bump
+
+2008-03-01  Sam Steingold  <sds@gnu.org>
+
+	* record.d (CONSTANT_INITFUNCTION_P): new define
+	(CONSTANT-INITFUNCTION-P, %SHARED-INITIALIZE, do_initialize_instance):
+	(%MAKE-INSTANCE): use it
+
+2008-02-29  Sam Steingold  <sds@gnu.org>
+
+	* record.d (CLOSURE-CONSTS): fix for the jitc addition
+
+2008-02-29  Sam Steingold  <sds@gnu.org>
+
+	* io.d (pr_cclosure_lang): fix printing of lalist & docstring yet again
+
+2008-02-27  Sam Steingold  <sds@gnu.org>
+
+	use keyword symbols from the core when possible
+	* utils/modprep.lisp (mk-objdef, objdef-object, objdef-local): add
+	(parse-signature, new-checker): use mk-objdef instead of init-to-objdef
+	(check-signature, lexical-analysis, print-tables-1): use
+	objdef-object & objdef-local instead of objdef-tag
+	NB: this feature is actually disabled because
+	&S(...) is invalid (S() is not an lvalue) in non-debug builds
+	* modules/berkeley-db/bdb.c, modules/gdbm/gdbm.c, modules/pcre/cpcre.c:
+	* modules/syscalls/calls.c, modules/regexp/regexi.c:
+	* modules/rawsock/rawsock.c, modules/clx/new-clx/clx.f:
+	use #\: in DEFUN to denote core keywords
+	* constsym.d (Kcopy): always define
+	(Kpreserve, Kinvert): add
+	* spvw_debug.d (get_symbol_count, get_constsym) [DEBUG_SPVW]: add
+	* modules/syscalls/calls.c (CONSTSYM) [DEBUG_SPVW]: use them
+
+2008-02-27  Sam Steingold  <sds@gnu.org>
+
+	* modules/syscalls/calls.c use S(K...) instead of `...` for
+	common keywords
+	(copy_method_t): move before DEFMODULE for DEFCHECKER to work
+	(check_copy_method): replace with a DEFCHECKER
+	(copy_method_object): remove
+
+2008-02-26  Sam Steingold  <sds@gnu.org>
+
+	* modules/wildcard/Makefile.in (all): depend on wildcard.fas
+	* modules/oracle/Makefile.in (all): depend on oracle.fas
+	* modules/fastcgi/Makefile.in (all): depend on fastcgi.fas
+	* modules/bindings/glibc/Makefile (all): depend on linux.fas
+	* modules/postgresql/Makefile.in (all): depend on postgresql.fas
+
+2008-02-26  Sam Steingold  <sds@gnu.org>
+
+	a less invasive work-around for bug #[ 1413016 ]:
+	it is not amd64 which is at fault, but TYPECODES
+	* makemake.in (XCFLAGS): revert the 2007-10-15 patch
+	* spvw_garcol.d (update) [TYPECODES]: comment out DEBUG_SPVW_ASSERT
+	(gc_unmarkcheck) [TYPECODES]: disable
+
+2008-02-26  Sam Steingold  <sds@gnu.org>
+
+	* spvw_debug.d (DEBUG_SPVW_ASSERT): print the failed assertion
+	before abort() both as is and with expanded macros
+
+2008-02-25  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (src/m4/gtk-2.0.m4): use wget instead of svn
+	* autogen.sh: svn is no longer required, let us keep it this way!
+
+2008-02-24  Sam Steingold  <sds@gnu.org>
+
+	* configure (info_help): use ./src/configure to get the list
+	of options which specify location of dependencies
+
+2008-02-24  Sam Steingold  <sds@gnu.org>
+
+	* Makefile.devel (GNULIB_CHECKOUT): do not specialize
+	on a specific user, one can always use a symlink
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	* configure (info_help): Mention the --with[out]-lib*-prefix options.
+	Sort the other options like autoconf does.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	* autogen.sh: New file.
+	* Makefile.devel (build-prerequisites): New target.
+	(all): Depend on it.
+	(EXCLUDE): Exclude autogen.sh.
+	* utils/fix-perms.sh: Ensure autogen.sh is executable.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	* Makefile.devel (GTK2_SVN_ROOT): New variable.
+	(m4/gtk-2.0.m4): New rule.
+	(aclocal.m4): Depend on it.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	* makemake.in (COPYRIGHT.rtf): Fix escaping.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	Make it easier to update the gnulib imported files.
+	* Makefile.devel (GNULIB_CVS_ROOT, GNULIB_CVS_REPOSITORY): New
+	variables.
+	(GNULIB_CHECKOUT): Renamed from GNULIB_HOME. Make it normally a
+	subdirectory of the current directory.
+	(update-gnulib): New rule.
+	(build-aux-update): Depend on it.
+	(gnulib-imported): Rename from gnulib-update.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	* Makefile.devel (build-aux-update): Pass option -d to 'cvs update'.
+	Remove unportable 'cd -' command.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	Add rule for fetching a working libtool.m4.
+	* build-aux/ltmain.sh: Remove file.
+	* Makefile.devel (src/aclocal.m4): Depend on src/m4/libtool.m4.
+	(build-aux-update): Depend on src/build-aux/ltmain.sh.
+	(LIBTOOL_VERSION, LIBTOOL_SOURCE_FILE, LIBTOOL_SOURCE_URL): New
+	variables.
+	(build-aux/ltmain.sh m4/libtool.m4): New rule.
+	(EXCLUDE): Also exclude the LIBTOOL_SOURCE_FILE and its predecessors.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	fix bug #[ 1836142 ] part 2.
+	* lispbibl.d (STACK_register, mv_count_register, value1_register)
+	(back_trace_register): Don't define for gcc-4.2 and newer when
+	USE_GCC_REGISTER_VARIABLES is not defined.
+
+2008-02-24  Bruno Haible  <bruno@clisp.org>
+
+	* lispbibl.d (STACK_register, mv_count_register, value1_register)
+	(back_trace_register): Define for gcc-3.3.[4-6].
+
+2008-02-23  Bruno Haible  <bruno@clisp.org>
+
+	fix bug #[ 1836142 ] part 1.
+	* floatparam.c (check): Change argument types to 'volatile type*'.
+	This defeats optimizations of gcc 4.3.0 snapshots.
+
+2008-02-16  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (create-fun-obj): jitc-p is true when either SPACE is 0
+	or SPEED is at least 1
+	* clos-genfun2b.lisp (*compile-no-jitc*): new constant
+	(compute-discriminating-function-<generic-function>)
+	(prototype-factory-table, finalize-fast-gf):
+	use it in generated lambda declarations instead of (COMPILE)
+
+2008-02-15  Sam Steingold  <sds@gnu.org>
+
+	* lightning.c (jit_run): use !fpointerp instead of nullp
+	to test cclosure_jitc
+	(jit_compile_) [DEBUG_BYTECODE]: declare byteptr_bad_jump
+
+2008-02-22  Sam Steingold  <sds@gnu.org>
+
+	* io.d (pr_cclosure_lang): fix printing of lalist & docstring
+
+2008-02-22  Sam Steingold  <sds@gnu.org>
+
+	make sure that CREATE-FUN-OBJ uses the correct OPTIMIZE settings
+	* compiler.lisp (fnode): add DENV slot
+	(c-LAMBDABODY): (SETF (FNODE-DENV *FUNC*) *DENV*)
+	(create-fun-obj): pass (FNODE-DENV FNODE) to DECLARED-OPTIMIZE
+	(make-trampoline): revert last patch: do not bind *DENV*; instead,
+	pass :DENV '((OPTIMIZE (SPACE 3) (SPEED 0))) to MAKE-FNODE
+
+2008-02-19  Sam Steingold  <sds@gnu.org>
+
+	* utils/fix-perms.sh: all *.d are non-executable
+
+2008-02-19  Sam Steingold  <sds@gnu.org>
+
+	* compiler.lisp (make-trampoline): use backquote for readability;
+	bind *DENV* for DECLARED-OPTIMIZE in CREATE-FUN-OBJ
+	(create-fun-obj): compute (DECLARED-OPTIMIZE 'SPACE) just once,
+	not 3 times
+	(c-REQUIRE): do not suppress load libfile message completely
+
+2008-02-19  Sam Steingold  <sds@gnu.org>
+
+	* macros3.lisp (compile-time-value): new exported user macro
+	* init.lisp (compile-time-value): export from EXT
+	* compiler.lisp (c-COMPILE-TIME-VALUE): compile it
+	(c-form-table): use c-COMPILE-TIME-VALUE for COMPILE-TIME-VALUE
+	* foreign1.lisp (compile-time-value): remove broken definition
+
+2008-02-15  Sam Steingold  <sds@gnu.org>
+
+	* spvw.d, _clisp.c: remove the last vestiges of the -s command
+	line option, removed on 2004-08-31
+
+2008-02-14  Sam Steingold  <sds@gnu.org>
+
+	* record.d (make_code_vector): converted from MAKE-CODE-VECTOR
+	(make_closure): accept 7 keywords instead of 6 positional arguments;
+	call make_code_vector on :CODE
+	(make_constant_initfunction): update
+	* subr.d, constsym.d (make_code_vector): remove
+	* constsym.d (make_closure): rename from %MAKE-CLOSURE to MAKE-CLOSURE
+	(Kcode, Kconstants, Kseclass, Klambda_list, Kdocumentation, Kjitc_p):
+	add
+	* subrkw.d (make_closure): add
+	* eval.d (FUNTAB): remove make_code_vector
+	* io.d (CLOSURE-READER): update the C_make_closure() call
+	* compiler.lisp (make-closure): remove defun
+	(create-fun-obj): update make-closure call
+
 2008-02-14  Sam Steingold  <sds@gnu.org>
 
 	* constobj.d (version): bump
@@ -100,8 +2535,8 @@
 
 	accept "-lp" to add to *LOAD-PATHS*
 	(and fix mingw separate directory build, see
-	http://permalink.gmane.org/gmane.lisp.clisp.devel/17375
-	http://permalink.gmane.org/gmane.lisp.clisp.devel/17388)
+	http://article.gmane.org/gmane.lisp.clisp.devel/17375
+	http://article.gmane.org/gmane.lisp.clisp.devel/17388)
 	* init.lisp (*load-paths*): do not reset
 	* constsym.d (*load-paths*): add
 	* spvw.d (init_symbol_values): init *LOAD-PATHS*
@@ -195,7 +2630,7 @@
 	* makemake.in: libsvm requires FFI
 	* modules/fastcgi/configure.in, modules/oracle/configure.in:
 	* modules/pari/configure.in, modules/postgresql/configure.in:
-        * modules/wildcard/configure.in, modules/zlib/configure.in:
+	* modules/wildcard/configure.in, modules/zlib/configure.in:
 	fail if ffcall is not present
 
 2008-01-29  Sam Steingold  <sds@gnu.org>
@@ -350,9 +2785,9 @@
 
 2008-01-16  Sam Steingold  <sds@gnu.org>
 
-	* pathname.d (open_file): fix G++ compilation
+	* pathname.d (open_file): fix g++ compilation
 	* charstrg.d (uc_width): remove the global inline declaration of
-	the gnulib function to avoid a G++ warning
+	the gnulib function to avoid a g++ warning
 
 2008-01-16  Sam Steingold  <sds@gnu.org>
 
@@ -909,11 +3344,11 @@
 
 	<24_more_anz>
 	* control.d, lispbibl.d (specdecled_, make_variable_frame): rename
-        arg and local spec_anz to spec_count
-        * control.d (make_variable_frame): rename local var_anz to var_count
-        * eval.d, lispbibl.d (frame_anz): rename to frame_count
+	arg and local spec_anz to spec_count
+	* control.d (make_variable_frame): rename local var_anz to var_count
+	* eval.d, lispbibl.d (frame_anz): rename to frame_count
 	<23_clos_reqoptkey_anz>
-        * eval.d, lispbibl.d: rename global members
+	* eval.d, lispbibl.d: rename global members
 	(clos_spec_anz): -> clos_spec_count
 	(clos_req_anz): -> clos_req_count
 	(clos_opt_anz): -> clos_opt_count
@@ -967,10 +3402,10 @@
 
 	<16_strcmp3>
 	* charstrg.d, constsym.d, eval.d, subr.d, subrkw.d:
-        (string_grgleich): rename to string_gtequal
+	(string_grgleich): rename to string_gtequal
 	(cs_string_grgleich): rename to cs_string_gtequal
-        * charstrg.d, constsym.d, eval.d, sequence.d, subr.d, subrkw.d:
-        (search_string_gleich): rename to search_string_eq
+	* charstrg.d, constsym.d, eval.d, sequence.d, subr.d, subrkw.d:
+	(search_string_gleich): rename to search_string_eq
 	<15_strcmp2>
 	* charstrg.d, constsym.d, eval.d, subr.d, subrkw.d:
 	(string_groesser): rename to string_greater
@@ -1460,8 +3895,8 @@
 2007-10-29  Sam Steingold  <sds@gnu.org>
 
 	Work around the wildcard build error reported in
-	<http://permalink.gmane.org/gmane.lisp.clisp.devel/16815>
-	and <http://permalink.gmane.org/gmane.lisp.clisp.devel/16824>.
+	<http://article.gmane.org/gmane.lisp.clisp.devel/16815>
+	and <http://article.gmane.org/gmane.lisp.clisp.devel/16824>.
 	The problem is that all gnulib autoconf macros are called from
 	src/glm4/gnulib-comp.m4:gl_INIT, so they should not be called from
 	module configures; we can rely on sourcing config.cache.
@@ -1737,7 +4172,7 @@
 
 2007-10-18  Sam Steingold  <sds@gnu.org>
 
-	* modules/gdbm/gdbm.c (check_gdbm, open_gdbm): support g++ compilation
+	* modules/gdbm/gdbm.c (check_gdbm, open_gdbm): fix g++ compilation
 
 2007-10-18  Sam Steingold  <sds@gnu.org>
 
@@ -2777,8 +5212,8 @@
 
 	fix bug #[ 1482465 ]: confusing format error report, cause fill-stream
 	* format.lisp (format-error): use ~T for indentation and ~S to
-	print format string so thhat the spacing is preserved
-	* constsym.d (stream_start_s_expression, stream_end_s_expression): added
+	print format string so that the spacing is preserved
+	* constsym.d (stream_start_s_expression, stream_end_s_expression): add
 	* io.d (write_spaces): use check_posfixnum
 	(FORMAT-TABULATE): use check_posfixnum
 	call STREAM-START-S-EXPRESSION and STREAM-END-S-EXPRESSION around
@@ -3594,7 +6029,7 @@
 
 	* m4/general.m4 (CL_CANONICAL_HOST_CPU_FOR_FFCALL):
 	re-enable FFI for mips/mipsel
-	http://permalink.gmane.org/gmane.lisp.cl-debian/1493
+	http://article.gmane.org/gmane.lisp.cl-debian/1493
 
 2006-07-14  Peter Van Eynde  <pvaneynd@debian.org>
 	Sam Steingold  <sds@podval.org>
@@ -3943,8 +6378,8 @@
 
 	Report circular and dotted lists in macro forms and type specifiers.
 	Allow circular and dotted lists in DESTRUCTURING-BIND.
-	* list.d (sys::list-length-in-bounds-p,
-	sys::proper-list-length-in-bounds-p): New functions.
+	* list.d (sys::list-length-in-bounds-p)
+	(sys::proper-list-length-in-bounds-p): New functions.
 	* defmacro.lisp (macro-call-error): Provide different error messages
 	for the case of a circular or dotted list.
 	(%proper-list-p): New special variable.
@@ -24271,7 +26706,7 @@
 
 	fixed bug #[ 873204 ]: infinite recursion with pprint-logical-block
 	* io.d (pretty_print_call): avoid an infinite recursion by
-	cheking *PRIN-PPRINTER* before calling PPRINT-DISPATCH
+	checking *PRIN-PPRINTER* before calling PPRINT-DISPATCH
 
 2004-01-08  Sam Steingold  <sds@gnu.org>
 
