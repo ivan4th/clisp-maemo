@@ -195,26 +195,12 @@ local int exitcode;
 #if defined(SPVW_BLOCKS) && defined(SPVW_PURE) /* e.g. UNIX_LINUX, Linux 0.99.7 */
   #define SPVW_PURE_BLOCKS
 #endif
-#if defined(SPVW_PAGES) && defined(SPVW_MIXED) /* e.g. SUN3, HP9000_800 */
+#if defined(SPVW_PAGES) && defined(SPVW_MIXED) /* e.g. HP9000_800 */
   #define SPVW_MIXED_PAGES
 #endif
-#if defined(SPVW_PAGES) && defined(SPVW_PURE) /* e.g. SUN4, SUN386 */
+#if defined(SPVW_PAGES) && defined(SPVW_PURE) /* e.g. SUN4 */
   #define SPVW_PURE_PAGES
 #endif
-
-/* canonical addresses:
- With MULTIMAP_MEMORY, the same spot in memory can be accessed with different
- pointers-types. The management of the heaps needs a "canonical"
- pointer. Via this pointer access takes place, and comparisons occur
- via >=, <=. heap_start and heap_end are canonical addresses. */
-#ifdef MULTIMAP_MEMORY
-  #define canonaddr(obj)  upointer(obj)
-  #define canon(address)  ((address) & oint_addr_mask)
-#else
-  #define canonaddr(obj)  (aint)ThePointer(obj)
-  #define canon(address)  (address)
-#endif
-/* canonaddr(obj) == canon((aint)ThePointer(obj)). */
 
 /* --------------------------------------------------------------------------
                           Page-Allocation */
@@ -224,18 +210,6 @@ local int exitcode;
 #include "spvw_mmap.c"
 
 #endif  /* SINGLEMAP_MEMORY || TRIVIALMAP_MEMORY || MULTITHREAD */
-
-#ifdef MULTIMAP_MEMORY
-
-#include "spvw_multimap.c"
-
-#if defined(MAP_MEMORY_TABLES)
-  /* symbol_tab is multi-mapped, always at the same address.
-   This speeds up loadmem() a little. */
-  #define MULTIMAP_MEMORY_SYMBOL_TAB
-#endif
-
-#endif  /* MULTIMAP_MEMORY */
 
 #if defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY)
 
@@ -251,59 +225,61 @@ local int exitcode;
 
 /* Global variables. */
 
+#ifndef MULTITHREAD
+
 /* the STACK: */
 #if !defined(STACK_register)
-global per_thread gcv_object_t* STACK;
+global gcv_object_t* STACK; 
 #endif
 #ifdef HAVE_SAVED_STACK
-global per_thread gcv_object_t* saved_STACK;
+global gcv_object_t* saved_STACK;
 #endif
 
 /* MULTIPLE-VALUE-SPACE: */
 #if !defined(mv_count_register)
-global per_thread uintC mv_count;
+global uintC mv_count;
 #endif
 #ifdef NEED_temp_mv_count
-global per_thread uintC temp_mv_count;
+global uintC temp_mv_count;
 #endif
 #ifdef HAVE_SAVED_mv_count
-global per_thread uintC saved_mv_count;
+global uintC saved_mv_count;
 #endif
-global per_thread object mv_space [mv_limit-1];
+global object mv_space [mv_limit-1];
 #ifdef NEED_temp_value1
-global per_thread object temp_value1;
+global object temp_value1;
 #endif
 #ifdef HAVE_SAVED_value1
-global per_thread object saved_value1;
+global object saved_value1;
 #endif
 
 /* During the execution of a SUBR, FSUBR: the current SUBR resp. FSUBR */
 #if !defined(back_trace_register)
-global per_thread p_backtrace_t back_trace = NULL;
+global p_backtrace_t back_trace = NULL;
 #endif
 #ifdef HAVE_SAVED_back_trace
-global per_thread p_backtrace_t saved_back_trace;
+global p_backtrace_t saved_back_trace;
 #endif
 
 /* during callbacks, the saved registers: */
 #if defined(HAVE_SAVED_REGISTERS)
-global per_thread struct registers * callback_saved_registers = NULL;
+global struct registers * callback_saved_registers = NULL;
 #endif
 
 /* stack-limits: */
 #ifndef NO_SP_CHECK
-global per_thread void* SP_bound;          /* SP-growth-limit */
+global void* SP_bound;          /* SP-growth-limit */
 #endif
-global per_thread void* STACK_bound;       /* STACK-growth-limit */
-global per_thread void* STACK_start;       /* STACK initial value */
+global void* STACK_bound;       /* STACK-growth-limit */
+global void* STACK_start;       /* STACK initial value */
 
 /* the lexical environment: */
-global per_thread gcv_environment_t aktenv;
+global gcv_environment_t aktenv;
 
-global per_thread unwind_protect_caller_t unwind_protect_to_save;
+global unwind_protect_caller_t unwind_protect_to_save;
 
 /* variables for passing of information to the top of the handler: */
-global per_thread handler_args_t handler_args;
+global handler_args_t handler_args;
 
 /* As only whole regions of handlers are deactivated and activated again,
  we treat the handlers on deactivation separately, but we maintain
@@ -311,12 +287,10 @@ global per_thread handler_args_t handler_args;
  A handler counts as inactive if and only if:
  low_limit <= handler < high_limit
  is true for one of the regions listed in inactive_handlers */
-global per_thread stack_range_t* inactive_handlers = NULL;
+global stack_range_t* inactive_handlers = NULL;
 
 /* --------------------------------------------------------------------------
                            Multithreading */
-
-#ifndef MULTITHREAD
 
 #define for_all_threadobjs(statement)                                   \
   do { var gcv_object_t* objptr = (gcv_object_t*)&aktenv;               \
@@ -335,12 +309,18 @@ global per_thread stack_range_t* inactive_handlers = NULL;
     { statement;  }                         \
   } while(0)
 
+/* #if MULTITHREAD*/
 #else
 
 /* Mutex protecting the set of threads. */
 local xmutex_t allthreads_lock;
 
 /* Set of threads. */
+/* We can define max threads as
+   #define MAX_THREADS ((unsigned)minus_bit(THREAD_SP_SHIFT) >> THREAD_SP_SHIFT)
+   on 32 bit systems this gives 1023, however on 64 bit it will give a very big number.
+   also there will be many conflicts with the CLSIP heap in mapping memory models. 
+ */
 #define MAXNTHREADS  128
 local uintC nthreads = 0;
 local clisp_thread_t* allthreads[MAXNTHREADS];
@@ -351,32 +331,80 @@ local uintL num_symvalues = 0;
  storage must be added.
  = floor(round_up(thread_size(num_symvalues),mmap_pagesize)
          -offsetofa(clisp_thread_t,_symvalues),sizeof(gcv_object_t)) */
-local uintL maxnum_symvalues;
+global uintL maxnum_symvalues; /* VTZ: changed to global */
+
+#ifdef per_thread
+global per_thread clisp_thread_t *_current_thread;
+#else
+global xthread_key_t current_thread_tls_key;
+#endif
 
 /* Initialization. */
 local void init_multithread (void) {
   xthread_init();
   xmutex_init(&allthreads_lock);
-  maxnum_symvalues = floor(((thread_size(0)+mmap_pagesize-1)&-mmap_pagesize)
+  maxnum_symvalues = floor(((thread_size(0)+THREAD_SYMVALUES_ALLOCATION_SIZE-1)&-THREAD_SYMVALUES_ALLOCATION_SIZE)
                            -offsetofa(clisp_thread_t,_symvalues),
                            sizeof(gcv_object_t));
+  #if !defined(per_thread)
+    xthread_key_create(&current_thread_tls_key);
+  #endif
 }
 
-/* Create a new thread. */
-local clisp_thread_t* create_thread (void* sp) {
+/* VTZ: forward declaration */
+local inline void get_reserved_memory_regions(uintM *addr_start, uintM *addr_end);
+
+/* VTZ: allocates a LISP stack for new thread (except for the main one) 
+ The stack_size parameters is in bytes. The function is quite ugly since it 
+ tries to avoid "reserved" but still not mapped regions by the CLISP heap.
+ since CLISP maps with MAP_FIXED - it will destroy our mapping if it happens to overlap.
+ in SPVW_PAGES - there are no problems (and the code succeeds on-the first try).
+ TODO: to rewrite it. probably we should reserve some memory range in advance.
+  this probing is very tedious */
+local void* allocate_lisp_thread_stack(clisp_thread_t* thread, uintM stack_size)
+{ 
+  var uintM low,high;
+  low=(uintM)malloc(stack_size);
+  if (!low) return NULL;
+  high=low+stack_size/sizeof(uintM);
+  #ifdef STACK_DOWN
+   thread->_STACK_bound=(gcv_object_t *)low + 0x40;
+   thread->_STACK=(gcv_object_t *)high;
+  #endif
+  #ifdef STACK_UP
+   thread->_STACK_bound=(gcv_object_t *)high - 0x40;
+   thread->_STACK=(gcv_object_t *)low;
+  #endif
+  thread->_STACK_start=thread->_STACK;
+  return thread->_STACK;
+}
+
+/* VTZ: creates new clisp_thread_t, allocates new C and LISP stacks and initializes the clisp_thread_t structure. 
+   DO NOT CALL WITH c_stack_size DIFFERENT THE THREAD_SP_SIZE !!!!
+   the whole stack regions is:
+   |c_stack_pointer->--------------------------------------------<-clisp_thread_t|
+*/
+global clisp_thread_t* create_thread(uintM lisp_stack_size)
+{
   var clisp_thread_t* thread;
   xmutex_lock(&allthreads_lock);
   if (nthreads >= MAXNTHREADS) { thread = NULL; goto done; }
-  thread = sp_to_thread(sp);
-  if (mmap_zeromap(thread,(thread_size(num_symvalues)+mmap_pagesize-1)&-mmap_pagesize) < 0)
-    { thread = NULL; goto done; }
+  thread=(clisp_thread_t *)malloc((thread_size(num_symvalues)+THREAD_SYMVALUES_ALLOCATION_SIZE-1)&-THREAD_SYMVALUES_ALLOCATION_SIZE);
+  if (!thread) goto done;
+  /* VTZ: let's zero up everything - later on when we are sure that we initialize all required things 
+   we will remove this. */
+  memset(thread,0,(thread_size(num_symvalues)+mmap_pagesize-1)&-mmap_pagesize); /* zero everythnig */
   thread->_index = nthreads;
   {
     var gcv_object_t* objptr =
       (gcv_object_t*)((uintP)thread+thread_objects_offset(num_symvalues));
     var uintC count;
     dotimespC(count,thread_objects_count(num_symvalues),
-      { *objptr++ = NIL; objptr++; });
+      { *objptr++ = NIL; });
+  }
+  /* allocate the LISP stack */
+  if (lisp_stack_size) {
+    if (!allocate_lisp_thread_stack(thread,lisp_stack_size)) { free(thread); thread=NULL; goto done;}
   }
   allthreads[nthreads] = thread;
   nthreads++;
@@ -385,13 +413,21 @@ local clisp_thread_t* create_thread (void* sp) {
   return thread;
 }
 
-  /* Delete a thread. */
-local void delete_thread (clisp_thread_t* thread) {
+  /* VTZ: Releases current_thread resources */
+global void delete_thread () {
+  clisp_thread_t *thread=current_thread();
   xmutex_lock(&allthreads_lock);
   ASSERT(thread->_index < nthreads);
   ASSERT(allthreads[thread->_index] == thread);
   allthreads[thread->_index] = allthreads[nthreads-1];
   nthreads--;
+  /* VTZ: deallocate all stuff (stacks) allocated above */
+  #ifdef STACK_DOWN
+    free((gcv_object_t *)thread->_STACK_bound-0x40);
+  #endif
+  #ifdef STACK_UP
+    free(thread->_STACK_start);
+  #endif
   xmutex_unlock(&allthreads_lock);
 }
 
@@ -408,10 +444,13 @@ local uintL make_symvalue_perthread (object value) {
   var uintL symbol_index;
   xmutex_lock(&allthreads_lock);
   if (num_symvalues == maxnum_symvalues) {
+    /*
+      VTZ:TODO IMLEMENT.
     for_all_threads({
       if (mmap_zeromap((void*)((uintP)thread+((thread_size(num_symvalues)+mmap_pagesize-1)&-mmap_pagesize)),mmap_pagesize) < 0)
         goto failed;
     });
+    */ 
     maxnum_symvalues += mmap_pagesize/sizeof(gcv_object_t);
   }
   symbol_index = num_symvalues++;
@@ -456,6 +495,54 @@ local uintL make_symvalue_perthread (object value) {
 /* A dummy-page for lastused: */
   local NODE dummy_NODE;
   #define dummy_lastused  (&dummy_NODE)
+
+#endif
+
+#if defined(MULTITHREAD)
+/* VTZ: Tries to "detect"/"summarize" the "assumed"/"reserved" memory regions that
+   are/will_be used by CLISP heap. We should not overlap with them.
+  TODO: should be checked carefully - not sure that it is correct. */
+local inline void get_reserved_memory_regions(uintM *addr_start, uintM *addr_end)
+{
+#if defined (SPVW_MIXED_BLOCKS_OPPOSITE)
+  *addr_start=mem.heaps[0].heap_start;
+  #if !defined(TRIVIALMAP_MEMORY)
+    *addr_end=mem.MEMTOP;
+  #else
+    *addr_end=mem.conses.heap_end;
+  #endif
+#elif defined(SPVW_PURE_BLOCKS) || defined(SPVW_MIXED_BLOCKS_STAGGERED)
+  *addr_start=mem.heaps[0].heap_start;
+  *addr_end=mem.heaps[heapcount-1].heap_hardlimit;
+#else
+  /* VTZ:TODO may be additional checks ??? */
+  /* in SPVW_PAGES nothing is reserved */
+  *addr_end=0;
+  *addr_start=0;
+  return;
+#endif
+  /* VTZ:TODO in case we are called before heaps are initialized (aka - for the main thread)
+   we want to forbid some region that later on is assumed to be used by the heap.
+  Following works on 32 bit linux and osx. */
+  if (*addr_start==*addr_end) {
+    *addr_end=0x80000000;
+    *addr_start=0;
+  }
+}
+/* VTZ: returns is it safe to use [addr_start,addr_end) region of memory (since the heap may grow with MAP_FIXED in to it)
+ The function examines the heap limits depending on the memory model.
+ TODO: should be checked carefully. */
+local bool is_safe_region(uintM addr_start, uintM addr_end)
+{
+var uintM low; /* bottom of reserved memory ??? */
+var uintM high; /* the highest possible heap address */
+ get_reserved_memory_regions(&low,&high);
+  /* we have 2 intervals - we have to check for overlap 
+   return max((uintM)addr_start,low) > min((uintM)addr_end,high) */
+  low=(low < addr_start) ? addr_start : low;
+  high=(high < addr_end) ? high : addr_end;
+  return low > high;
+}
 
 #endif
 
@@ -644,8 +731,12 @@ global void* getSP (void) {
 }
 #endif
 
+/* VTZ: moved SP_anchor to clisp_thread_t. in MT it is part of the thread 
+ Seems it is used only for debugging/checking purposes. */
+#if !defined(MULTITHREAD)
 /* The initial value of SP() during main(). */
-global void* SP_anchor;
+global void* SP_anchor; 
+#endif
 
 /* error-message when a location of the program is reached that is (should be)
  unreachable. Does not return.
@@ -1165,7 +1256,7 @@ local void init_symbol_values (void) {
   /* common: */
   define_constant(S(nil),S(nil)); /* NIL := NIL */
   define_constant(S(t),S(t));     /* T := T */
-  define_variable(S(gc_statistics_stern),Fixnum_minus1); /* SYS::*GC-STATISTICS* := -1 */
+  define_variable(S(gc_statistics_star),Fixnum_minus1); /* SYS::*GC-STATISTICS* := -1 */
   /* for EVAL/CONTROL: */
   define_constant_UL1(S(lambda_parameters_limit),lp_limit_1); /* LAMBDA-PARAMETERS-LIMIT := lp_limit_1 + 1 */
   define_constant_UL1(S(call_arguments_limit),ca_limit_1); /* CALL-ARGUMENTS-LIMIT := ca_limit_1 + 1 */
@@ -1173,15 +1264,15 @@ local void init_symbol_values (void) {
   define_constant(S(jmpbuf_size),fixnum(jmpbufsize)); /* SYS::*JMPBUF-SIZE* := size of a jmp_buf */
   define_constant(S(big_endian),(BIG_ENDIAN_P ? T : NIL)); /* SYS::*BIG-ENDIAN* := NIL resp. T */
   define_variable(S(macroexpand_hook),L(funcall)); /* *MACROEXPAND-HOOK* := #'FUNCALL */
-  define_variable(S(evalhookstern),NIL);           /* *EVALHOOK* */
-  define_variable(S(applyhookstern),NIL);          /* *APPLYHOOK* */
+  define_variable(S(evalhookstar),NIL);            /* *EVALHOOK* */
+  define_variable(S(applyhookstar),NIL);           /* *APPLYHOOK* */
   /* for HASHTABL: */
   define_variable(S(eq_hashfunction),S(fasthash_eq)); /* EXT:*EQ-HASHFUNCTION* := 'EXT:FASTHASH-EQ */
   define_variable(S(eql_hashfunction),S(fasthash_eql)); /* EXT:*EQL-HASHFUNCTION* := 'EXT:FASTHASH-EQL */
   define_variable(S(equal_hashfunction),S(fasthash_equal)); /* EXT:*EQUAL-HASHFUNCTION* := 'EXT:FASTHASH-EQUAL */
   define_variable(S(warn_on_hashtable_needing_rehash_after_gc),NIL); /* CUSTOM:*WARN-ON-HASHTABLE-NEEDING-REHASH-AFTER-GC* := NIL */
   /* for PACKAGE: */
-  define_variable(S(packagestern),Car(O(all_packages))); /* *PACKAGE* := '#<PACKAGE LISP> */
+  define_variable(S(packagestar),Car(O(all_packages))); /* *PACKAGE* := '#<PACKAGE LISP> */
   /* for SYMBOL: */
   define_variable(S(gensym_counter),Fixnum_1); /* *GENSYM-COUNTER* := 1 */
   /* for PATHNAME: */
@@ -1262,7 +1353,7 @@ local void init_symbol_values (void) {
    define_variable(S(read_base),);               - *READ-BASE* := 10
    define_variable(S(read_suppress),);           - *READ-SUPPRESS* := NIL
    define_variable(S(read_eval),);               - *READ-EVAL* := T
-   define_variable(S(readtablestern),);          - *READTABLE* */
+   define_variable(S(readtablestar),);           - *READTABLE* */
   define_variable(S(read_preserve_whitespace),unbound); /* SYS::*READ-PRESERVE-WHITESPACE* */
   define_variable(S(read_recursive_p),unbound); /* SYS::*READ-RECURSIVE-P* */
   define_variable(S(read_reference_table),unbound); /* SYS::*READ-REFERENCE-TABLE* */
@@ -1315,6 +1406,7 @@ local void init_symbol_values (void) {
   define_variable(S(print_empty_arrays_ansi),NIL); /* CUSTOM:*PRINT-EMPTY-ARRAYS-ANSI* */
   define_variable(S(print_unreadable_ansi),NIL); /* CUSTOM:*PRINT-UNREADABLE-ANSI* */
   define_variable(S(parse_namestring_ansi),NIL); /* CUSTOM:*PARSE-NAMESTRING-ANSI* */
+  define_variable(S(reopen_open_file),S(error)); /* CUSTOM:*REOPEN-OPEN-FILE* */
  #ifdef PATHNAME_NOEXT
   define_variable(S(parse_namestring_dot_file),S(Ktype)); /* CUSTOM:*PARSE-NAMESTRING-DOT-FILE* */
  #endif
@@ -1323,8 +1415,8 @@ local void init_symbol_values (void) {
   define_variable(S(device_prefix),NIL); /* CUSTOM:*DEVICE-PREFIX* */
  #endif
   /* for EVAL: */
-  define_variable(S(evalhookstern),NIL);  /* *EVALHOOK* := NIL */
-  define_variable(S(applyhookstern),NIL); /* *APPLYHOOK* := NIL */
+  define_variable(S(evalhookstar),NIL);  /* *EVALHOOK* := NIL */
+  define_variable(S(applyhookstar),NIL); /* *APPLYHOOK* := NIL */
   /* for MISC: */
   define_constant(S(internal_time_units_per_second), /* INTERNAL-TIME-UNITS-PER-SECOND */
                   fixnum(ticks_per_second) ); /* := 200 resp. 1000000 */
@@ -1433,6 +1525,9 @@ local void init_object_tab (void) {
      #endif
      #if (base_char_code_limit == char_code_limit)
       " :BASE-CHAR=CHARACTER"
+     #endif
+     #ifdef WIDE_HARD
+      " :WORD-SIZE=64"
      #endif
      #ifdef PC386
       " :PC386"
@@ -1599,7 +1694,7 @@ local void init_other_modules_2 (void) {
 /* print usage */
 local void usage (void) {
   printf(PACKAGE_NAME " (" PACKAGE_BUGREPORT ") ");
-  printf(GETTEXTL("is an ANSI Common Lisp."));
+  printf(GETTEXTL("is an ANSI Common Lisp implementation."));
   printf("\n");
   printf(GETTEXTL("Usage:  "));
   printf(program_name);
@@ -1618,10 +1713,7 @@ local void usage (void) {
   printf(GETTEXTL(" -K linkingset - use this executable and memory image\n"));
  #endif
   printf(GETTEXTL(" -M memfile    - use this memory image\n"));
-  printf(GETTEXTL(" -m size       - memory size (size = xxxxxxxB or xxxxKB or xMB)\n"));
-  #ifdef MULTIMAP_MEMORY_VIA_FILE
-  printf(GETTEXTL(" -t tmpdir     - temporary directory for memmap\n"));
-  #endif
+  printf(GETTEXTL(" -m size       - memory size (size = nB or nKB or nMB)\n"));
   printf(GETTEXTL("Internationalization:\n"));
   printf(GETTEXTL(" -L language   - set user language\n"));
   printf(GETTEXTL(" -N nlsdir     - NLS catalog directory\n"));
@@ -1829,22 +1921,23 @@ local maygc void install_global_handlers (on_error_t on_error)
   /* do nothing if there is no memory image */
   if (!boundp(Symbol_function(S(set_global_handler)))) return;
   switch (on_error) {
-    case ON_ERROR_EXIT:
+    case ON_ERROR_EXIT: {
       pushSTACK(S(interrupt_condition));
       pushSTACK(Symbol_function(S(exitunconditionally)));
       funcall(S(set_global_handler),2);
       pushSTACK(S(serious_condition));
       pushSTACK(Symbol_function(S(exitonerror)));
       funcall(S(set_global_handler),2);
-      goto appease;
-    case ON_ERROR_ABORT:
+    } goto appease;
+    case ON_ERROR_ABORT: {
       pushSTACK(S(serious_condition));
       pushSTACK(Symbol_function(S(abortonerror)));
       funcall(S(set_global_handler),2);
-      /*FALLTHROUGH*/
-    case ON_ERROR_APPEASE: appease:
+    } /*FALLTHROUGH*/
+    case ON_ERROR_APPEASE: appease: {
       pushSTACK(S(error)); pushSTACK(Symbol_function(S(appease_cerror)));
       funcall(S(set_global_handler),2); return;
+    }
     case ON_ERROR_DEBUG: return;
     default: NOTREACHED;
   }
@@ -1893,9 +1986,6 @@ struct argv_init_c {
 /* Parameters needed to initialize Lisp memory. */
 struct argv_initparams {
   uintM argv_memneed;
- #ifdef MULTIMAP_MEMORY_VIA_FILE
-  const char* argv_tmpdir;
- #endif
   const char* argv_memfile;
 };
 
@@ -1979,7 +2069,7 @@ local inline int size_arg (const char *arg, const char *docstring, uintM *ret,
     fputs("\n",stderr);
     val = limit_high;
   }
-  /* For multiple -m resp. -s arguments, only the last counts. */
+  /* For multiple -m arguments, only the last counts. */
   *ret = val;
   return 0;
 }
@@ -1993,9 +2083,6 @@ local inline int parse_options (int argc, const char* const* argv,
   p0->argv_language = NULL;
   p0->argv_localedir = NULL;
   p1->argv_memneed = 0;
- #ifdef MULTIMAP_MEMORY_VIA_FILE
-  p1->argv_tmpdir = NULL;
- #endif
   p1->argv_memfile = NULL;
   p2->argv_memfile = NULL;
   p2->argv_verbose = 2;
@@ -2028,8 +2115,7 @@ local inline int parse_options (int argc, const char* const* argv,
 
   /* process arguments argv[0..argc-1] :
      -h              Help
-     -m size         Memory size (size = xxxxxxxB oder xxxxKB oder xMB)
-     -s size         Stack size (size = xxxxxxxB oder xxxxKB oder xMB)
+     -m size         Memory size (size = nB or nKB or nMB)
      -t directory    temporary directory
      -B directory    set lisplibdir
      -K linkingset   specify executable and mem file
@@ -2104,7 +2190,7 @@ local inline int parse_options (int argc, const char* const* argv,
                   return 1;                     \
                 }                               \
               } else arg += 2
-          case 'm':             /* memory size */
+          case 'm':             /* memory size  */
            #ifdef WIN32_NATIVE
             if (arg[2]=='m' && arg[3]=='\0') /* "-mm" -> print a memory map */
               { DumpProcessMemoryMap(); return 1; }
@@ -2126,17 +2212,8 @@ local inline int parse_options (int argc, const char* const* argv,
             if (asciz_equal(arg,"-traditional"))
               p2->argv_ansi = 2; /* traditional */
             else {
-             #ifdef MULTIMAP_MEMORY_VIA_FILE
-              OPTION_ARG;
-              if (!(p1->argv_tmpdir == NULL)) {
-                arg_error(GETTEXTL("multiple -t"),arg);
-                return 1;
-              }
-              p1->argv_tmpdir = arg;
-             #else
               INVALID_ARG(arg);
               return 1;
-             #endif
             }
             break;
           case 'd': /* developer mode */
@@ -2446,14 +2523,6 @@ local inline int parse_options (int argc, const char* const* argv,
       p1->argv_memneed = 768*1024*sizeof(gcv_object_t); /* 768 KW = 3 MB Default */
      #endif
     }
-   #ifdef MULTIMAP_MEMORY_VIA_FILE
-    if (p1->argv_tmpdir == NULL) {
-      p1->argv_tmpdir = getenv("TMPDIR"); /* try environment-variable */
-      if (p1->argv_tmpdir == NULL) {
-        p1->argv_tmpdir = "/tmp";
-      }
-    }
-   #endif
     if (!p2->argv_compile) {
       /* Some options are useful only together with '-c' : */
       if (p2->argv_compile_listing) {
@@ -2493,7 +2562,6 @@ local inline void free_argv_actions (struct argv_actions *p) {
 #endif
 extern char *get_executable_name (void);
 local inline int init_memory (struct argv_initparams *p) {
-  back_trace = NULL;
   {                  /* Initialize the table of relocatable pointers: */
     var object* ptr2 = &pseudofun_tab.pointer[0];
     { var const Pseudofun* ptr1 = (const Pseudofun*)&pseudocode_tab;
@@ -2510,7 +2578,7 @@ local inline int init_memory (struct argv_initparams *p) {
  #if (defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY) || defined(MULTITHREAD)) && (defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM))
   mmap_init_pagesize();
  #endif
- #if defined(MULTIMAP_MEMORY) || defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY)
+ #if defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY)
   init_map_pagesize();
  #endif
  #if defined(LINUX_NOEXEC_HEAPCODES) && defined(HAVE_MMAP_ANON)
@@ -2527,11 +2595,16 @@ local inline int init_memory (struct argv_initparams *p) {
   init_mem_heapnr_from_type();
  #endif
   init_modules_0();             /* assemble the list of modules */
- #ifdef MULTITHREAD
-  init_multithread();
-  create_thread((void*)roughly_SP());
- #endif
   end_system_call();
+
+#if defined(MULTITHREAD)
+  /*VTZ: initialize main thread. */
+  {
+    init_multithread();
+    set_current_thread(create_thread(0));
+  }
+#endif
+  back_trace = NULL;
  #ifdef MAP_MEMORY_TABLES
   {                             /* calculate total_subr_count: */
     var uintC total = 0;
@@ -2549,9 +2622,7 @@ local inline int init_memory (struct argv_initparams *p) {
       #define teile_objects    0
     #endif
     var uintL pagesize =        /* size of a page */
-     #if defined(MULTIMAP_MEMORY)
-      map_pagesize
-     #elif defined(GENERATIONAL_GC)
+     #if defined(GENERATIONAL_GC)
       mmap_pagesize
      #else  /* if the system-pagesize does not play a role */
       teile*varobject_alignment
@@ -2574,22 +2645,6 @@ local inline int init_memory (struct argv_initparams *p) {
     if (memneed > RESERVE_FOR_MALLOC*3/4) { memneed = RESERVE_FOR_MALLOC*3/4; }
     VAROUT(memneed);
    #endif
-   #if defined(MULTIMAP_MEMORY_VIA_SHM) && (defined(UNIX_SUNOS4) || defined(UNIX_SUNOS5))
-    /* SunOS 4 refuses to shmat() into a previously malloc-ed region,
-     even if there is a munmap() inbetween:
-     errno = EINVAL. Also the reverse, first to shmat() and then to
-     merge the occupied region with sbrk() or brk()  into the
-     data segment, fails with errno = ENOMEM.
-     The only way out is to fetch the necessary memory from far,
-     if possible, out of reach of malloc() . */
-    {
-      var uintM memhave = round_down(bit(oint_addr_len)-(aint)sbrk(0),SHMLBA);
-      VAROUT(memhave);
-      if (memhave < memneed) { memneed = memhave; }
-      memblock = round_down(bit(oint_addr_len) - memneed,SHMLBA);
-      VAROUT(memblock);
-    }
-   #else
     while (1) {
       memblock = (aint)mymalloc(memneed); /* try to allocate memory */
       VAROUT(memneed); VAROUT(memblock);
@@ -2612,11 +2667,6 @@ local inline int init_memory (struct argv_initparams *p) {
       fputs("\n",stderr);
       return -1;
     }
-   #endif
-   #ifdef MULTIMAP_MEMORY
-    /* Though we only need this address space and not its content, we must
-     not free it, as it must stay under our control. */
-   #endif
     {                       /* round to the next lower page boundary: */
       var uintL unaligned = (uintL)(-memblock) % pagesize;
       memblock += unaligned; memneed -= unaligned;
@@ -2629,49 +2679,6 @@ local inline int init_memory (struct argv_initparams *p) {
     }
     /* the memory region [memblock,memblock+memneed-1] is now free,
      and its boundaries are located on page boundaries. */
-   #ifdef MULTIMAP_MEMORY
-    #ifdef MULTIMAP_MEMORY_VIA_FILE
-    if ( initmap(p->argv_tmpdir) <0) return -1;
-    #else
-    if ( initmap() <0) return -1;
-    #endif
-    multimap(case_machine: MM_TYPECASES, memblock, memneed, false);
-    #ifdef MAP_MEMORY_TABLES
-    {                           /* set symbol_tab to address 0: */
-      var uintL memneed = round_up(sizeof(symbol_tab),pagesize); /* round up length */
-      multimap(case_symbolflagged: , 0, memneed, false);
-      VAROUT(memneed);
-    }
-    /* set subr_tab to address 0: */
-    if (zeromap(&subr_tab,round_up(varobjects_misaligned+total_subr_count*sizeof(subr_t),pagesize)) <0)
-      return -1;
-    #else
-    /* multimap symbol_tab and subr_tab:
-     symbol_tab and subr_tab keep their address. The region, they
-     are located in (in the data segment of the program!!), becomes
-     Shared Memory resp. shared-mmap-attach . What a hack!
-     This is irreconcilable with the existence of external modules
-     (DYNAMIC_MODULES) ! ?? */
-    {
-      var aint symbol_tab_start = round_down((aint)&symbol_tab,pagesize);
-      var aint symbol_tab_end = round_up((aint)&symbol_tab+sizeof(symbol_tab),pagesize);
-      var aint subr_tab_start = round_down((aint)&subr_tab,pagesize);
-      var aint subr_tab_end = round_up((aint)&subr_tab+sizeof(subr_tab),pagesize);
-      if ((symbol_tab_end <= subr_tab_start)
-          || (subr_tab_end <= symbol_tab_start)) {
-        /* two distinct intervals */
-        multimap(case_machine: case_symbolflagged: , symbol_tab_start, symbol_tab_end-symbol_tab_start, true);
-        multimap(case_machine: case_subr: , subr_tab_start, subr_tab_end-subr_tab_start, true);
-      } else {                  /* the tables have overlap! */
-        var aint tab_start = (symbol_tab_start < subr_tab_start ? symbol_tab_start : subr_tab_start);
-        var aint tab_end = (symbol_tab_end > subr_tab_end ? symbol_tab_end : subr_tab_end);
-        multimap(case_machine: case_symbolflagged: case_subr: , tab_start, tab_end-tab_start, true);
-      }
-    }
-    #endif  /* MAP_MEMORY_TABLES */
-    if (false)
-     no_mem: return -1;
-   #endif  /* MULTIMAP_MEMORY */
    #if defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY) /* <==> SPVW_PURE_BLOCKS || TRIVIALMAP_MEMORY */
     if ( initmap() <0) return -1;
     #ifdef SINGLEMAP_MEMORY
@@ -2749,7 +2756,7 @@ local inline int init_memory (struct argv_initparams *p) {
       mem.heaps[1].heap_hardlimit = 0x8F000000; /* upper bound of large usable range */
       mem.heaps[0].heap_hardlimit = mem.heaps[1].heap_limit = 0x60000000; /* arbitrary separator address */
        #else
-        #error "Where is room in the memory map to put the heaps?"
+        #error Where is room in the memory map to put the heaps?
        #endif
       #else
        #ifdef TYPECODES
@@ -2842,19 +2849,6 @@ local inline int init_memory (struct argv_initparams *p) {
         var uintM teil = free_reserved/teile; /* a sub block, a 1/16 of the room */
         var aint ptr = memblock;
         mem.MEMBOT = ptr;
-          #ifdef UNIX_NEXTSTEP
-            /* Set the stack size limit to 8 MB if possible to prevent
-             crashes from machine stack overflow.
-             (If the stack is large enough, the Lisp STACK will overflow
-             first, and the error will be handled in a reasonable way.) */
-            { var struct rlimit rl;
-              var long need = 0x800000; /* 8 Megabyte */
-              getrlimit(RLIMIT_STACK,&rl);
-              if (rl.rlim_max < need) { need = rl.rlim_max; }
-              if (rl.rlim_cur < need)
-                { rl.rlim_cur = need; setrlimit(RLIMIT_STACK,&rl); }
-            }
-          #endif
           #if defined(WIN32_NATIVE) && !defined(NO_SP_CHECK)
             /* Even if the NOCOST_SP_CHECK stack overflow detection (using a
              guard page) works, we set SP_bound.
@@ -3059,15 +3053,15 @@ local inline void main_actions (struct argv_actions *p) {
   install_global_handlers(p->argv_on_error);
   switch (p->argv_ansi) {
     case 1:                     /* Maximum ANSI CL compliance */
-      pushSTACK(T); funcall(L(set_ansi),1); break;
+      { pushSTACK(T); funcall(L(set_ansi),1); break; }
     case 2:                     /* The traditional CLISP behavior */
-      pushSTACK(NIL); funcall(L(set_ansi),1); break;
+      { pushSTACK(NIL); funcall(L(set_ansi),1); break; }
     default:                /* use the settings from the memory image */
       break;
   }
   if (p->argv_modern) {
     /* (IN-PACKAGE "CS-COMMON-LISP-USER") */
-    Symbol_value(S(packagestern)) = O(modern_user_package);
+    Symbol_value(S(packagestar)) = O(modern_user_package);
     /* (SETQ *PRINT-CASE* :DOWNCASE) */
     Symbol_value(S(print_case)) = S(Kdowncase);
   }
@@ -3112,20 +3106,21 @@ local inline void main_actions (struct argv_actions *p) {
     var gcv_object_t* top_of_frame = STACK; /* pointer over frame */
     var sp_jmp_buf returner; /* return point */
     finish_entry_frame(DRIVER,returner,,goto done_driver_rc;);
-    /* If no memfile is given, LOAD cannot be called with 3 arguments.
+    { /* If no memfile is given, LOAD cannot be called with 3 arguments.
        (LOAD (MAKE-PATHNAME :NAME ".clisprc"
                             :DEFAULTS (USER-HOMEDIR-PATHNAME))
              :IF-DOES-NOT-EXIST NIL) */
-    pushSTACK(S(Kname));
-    pushSTACK(ascii_to_string(".clisprc"));
-    pushSTACK(S(Kdefaults));
-    funcall(S(user_homedir_pathname),0);
-    pushSTACK(value1);
-    funcall(L(make_pathname),4);
-    pushSTACK(value1);
-    pushSTACK(S(Kif_does_not_exist));
-    pushSTACK(S(nil));
-    funcall(S(load),3);
+      pushSTACK(S(Kname));
+      pushSTACK(ascii_to_string(".clisprc"));
+      pushSTACK(S(Kdefaults));
+      funcall(S(user_homedir_pathname),0);
+      pushSTACK(value1);
+      funcall(L(make_pathname),4);
+      pushSTACK(value1);
+      pushSTACK(S(Kif_does_not_exist));
+      pushSTACK(S(nil));
+      funcall(S(load),3);
+    }
    done_driver_rc:
     setSTACK(STACK = top_of_frame); /* skip driver-frame */
   }
@@ -3213,7 +3208,7 @@ local inline void main_actions (struct argv_actions *p) {
     pushSTACK(packname);
     var object package = find_package(packname);
     if (!nullp(package)) {
-      Symbol_value(S(packagestern)) = package;
+      Symbol_value(S(packagestar)) = package;
     } else {
       pushSTACK(var_stream(S(standard_output),strmflags_wr_ch_B));
       terpri(&STACK_0);
@@ -3228,32 +3223,33 @@ local inline void main_actions (struct argv_actions *p) {
     var gcv_object_t* top_of_frame = STACK; /* pointer over frame */
     var sp_jmp_buf returner; /* return point */
     finish_entry_frame(DRIVER,returner,,goto done_driver_execute_file;);
-    /*  execute:
-     (PROGN
-       #+UNIX (SET-DISPATCH-MACRO-CHARACTER #\##\!
-               (FUNCTION SYS::UNIX-EXECUTABLE-READER))
-       (SETQ *LOAD-VERBOSE* NIL)
-       (LOAD argv_execute_file :EXTRA-FILE-TYPES ...)
-       (UNLESS argv_repl (EXIT))) */
-   #if defined(UNIX) || defined(WIN32_NATIVE)
-    /* Make clisp ignore the leading #! line. */
-    pushSTACK(ascii_char('#')); pushSTACK(ascii_char('!'));
-    pushSTACK(L(unix_executable_reader));
-    funcall(L(set_dispatch_macro_character),3);
-   #endif
-    Symbol_value(S(load_verbose)) = NIL;
-    if (asciz_equal(p->argv_execute_file,"-")) {
-      pushSTACK(Symbol_value(S(standard_input))); /* *STANDARD-INPUT* */
-    } else {
-      pushSTACK(asciz_to_string(p->argv_execute_file,O(misc_encoding)));
+    { /*  execute:
+       (PROGN
+         #+UNIX (SET-DISPATCH-MACRO-CHARACTER #\##\!
+                 (FUNCTION SYS::UNIX-EXECUTABLE-READER))
+         (SETQ *LOAD-VERBOSE* NIL)
+         (LOAD argv_execute_file :EXTRA-FILE-TYPES ...)
+         (UNLESS argv_repl (EXIT))) */
+     #if defined(UNIX) || defined(WIN32_NATIVE)
+      /* Make clisp ignore the leading #! line. */
+      pushSTACK(ascii_char('#')); pushSTACK(ascii_char('!'));
+      pushSTACK(L(unix_executable_reader));
+      funcall(L(set_dispatch_macro_character),3);
+     #endif
+      Symbol_value(S(load_verbose)) = NIL;
+      if (asciz_equal(p->argv_execute_file,"-")) {
+        pushSTACK(Symbol_value(S(standard_input))); /* *STANDARD-INPUT* */
+      } else {
+        pushSTACK(asciz_to_string(p->argv_execute_file,O(misc_encoding)));
+      }
+     #ifdef WIN32_NATIVE
+      pushSTACK(S(Kextra_file_types));
+      pushSTACK(O(load_extra_file_types));
+      funcall(S(load),3);
+     #else
+      funcall(S(load),1);
+     #endif
     }
-   #ifdef WIN32_NATIVE
-    pushSTACK(S(Kextra_file_types));
-    pushSTACK(O(load_extra_file_types));
-    funcall(S(load),3);
-   #else
-    funcall(S(load),1);
-   #endif
    done_driver_execute_file:
     setSTACK(STACK = top_of_frame); /* skip driver-frame */
     if (!p->argv_repl)
@@ -3286,17 +3282,12 @@ local inline void main_actions (struct argv_actions *p) {
       finish_entry_frame(DRIVER,returner,,;);
     here */
     var object main_loop_function = Symbol_function(S(main_loop));
-    if (closurep(main_loop_function)) {
+    if (closurep(main_loop_function)) { /* see reploop.lisp:main-loop ! */
       dynamic_bind(S(standard_input),value1);
-      /* (PROGN
-           (MAIN-LOOP)
-           ; Normally this will exit by itself once the string has reached EOF,
-           ; but to be sure:
-           (UNLESS argv_repl (EXIT))) */
-      funcall(main_loop_function,0);
+      /* (MAIN-LOOP !p->argv_repl) */
+      pushSTACK(p->argv_repl ? NIL : T);
+      funcall(main_loop_function,1);
       dynamic_unbind(S(standard_input));
-      if (!p->argv_repl)
-        return;
     } else /* no *DRIVER* => bootstrap, no -repl */
       Symbol_value(S(standard_input)) = value1;
   }
@@ -3332,6 +3323,7 @@ global int main (argc_t argc, char* argv[]) {
       goto end_of_main;
     }
   }
+
   /* The argv_* variables now have their final values.
    Analyze the environment variables determining the locale.
    Deal with LC_CTYPE. */
@@ -3341,10 +3333,11 @@ global int main (argc_t argc, char* argv[]) {
  #ifndef LANGUAGE_STATIC
   init_language(argv0.argv_language,argv0.argv_localedir);
  #endif
-  SP_anchor = (void*)SP();
+
   if (!(setjmp(original_context) == 0)) goto end_of_main;
   /* Initialize memory and load a memory image (if specified). */
   if (init_memory(&argv1) < 0) goto no_mem;
+  SP_anchor = (void*)SP(); /* VTZ: in MT current_thread() should be initialized */
   /* if the image was read from the executable, argv1.argv_memfile was
      set to exec name and now it has to be propagated to argv2.argv_memfile
      to avoid the beginner warning */
@@ -3410,7 +3403,7 @@ global int main (argc_t argc, char* argv[]) {
   init_ffi();
  #endif
   init_other_modules_2();     /* initialize modules yet uninitialized */
-  {                           /* final module initializations: */
+  { /* final module initializations: */
     var module_t* module;     /* loop over modules */
     for_modules(all_other_modules,{
       if (module->initfunction2)
@@ -3419,8 +3412,7 @@ global int main (argc_t argc, char* argv[]) {
     });
   }
   run_hooks(Symbol_value(S(init_hooks)));
-  /* Init O(argv). */
-  {
+  { /* Init O(argv). */
     O(argv) = allocate_vector(argc);
     var argc_t count;
     for (count = 0; count < argc; count++) {
@@ -3441,9 +3433,6 @@ global int main (argc_t argc, char* argv[]) {
   /*NOTREACHED*/
   /* termination of program via quit_instantly(): */
   end_of_main:
- #ifdef MULTIMAP_MEMORY
-  exitmap();
- #endif
   free_argv_initparams(&argv1);
   free_argv_actions(&argv2);
   fini_lowest_level();
@@ -3459,8 +3448,6 @@ global int main (argc_t argc, char* argv[]) {
        sigemptyset(&sigblock_mask); sigaddset(&sigblock_mask,sig);
        sigprocmask(SIG_UNBLOCK,&sigblock_mask,NULL);
      }
-     #elif defined(SIGNALBLOCK_BSD)
-     sigsetmask(sigblock(0) & ~sigmask(sig));
      #endif
     #endif
     /* Raise the signal. */
@@ -3727,7 +3714,7 @@ global void dynload_modules (const char * library, uintC modcount,
           add_module(module);
           /* pre-initialization, cf. init_subr_tab_1. */
           if (*module->stab_size > 0) module_set_argtypes(module);
-         #if (defined(MULTIMAP_MEMORY) || defined(SINGLEMAP_MEMORY)) && defined(MAP_MEMORY_TABLES)
+         #if defined(SINGLEMAP_MEMORY) && defined(MAP_MEMORY_TABLES)
           {
             var subr_t* newptr = (subr_t*)((char*)&subr_tab+varobjects_misaligned) + total_subr_count;
             var uintC count = *module->stab_size;
@@ -3752,19 +3739,6 @@ global void dynload_modules (const char * library, uintC modcount,
               }
               total_subr_count += *module->stab_size;
             }
-          }
-         #elif defined(MULTIMAP_MEMORY)
-          if (*module->stab_size > 0) {
-            /* multimap the subr_tab of the loaded module .
-             the pages to be mapped belong to the data segment of the
-             newly loaded Shared-Library, so are surely not yet
-             multi-mapped. */
-            var aint subr_tab_start = round_down((aint)module->stab,pagesize);
-            var aint subr_tab_end = round_up((aint)module->stab+(*module->stab_size)*sizeof(subr_t),pagesize);
-            multimap(case_machine: case_subr: , subr_tab_start, subr_tab_end-subr_tab_start, true);
-            if (false)
-             no_mem:
-              error_dlerror("multimap",NULL,"out of memory for subr_tab");
           }
          #endif
           /* main initialization. */

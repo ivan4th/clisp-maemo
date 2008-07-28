@@ -12,15 +12,15 @@
      NO_TERMCAP_NCURSES
    Internationalization:
      NO_GETTEXT, UNICODE
-   Fault handling:
-     NO_SIGSEGV
    Foreign function interface:
      DYNAMIC_FFI
    Dynamic loading of modules:
      DYNAMIC_MODULES
    Safety level:
      SAFETY={0,1,2,3}
-   Debugging (turned on by --with-debug configure option):
+   Exploit GCC global register variables:
+     USE_GCC_REGISTER_VARIABLES
+   Debugging (turned on by the --with-debug configure option):
      DEBUG_GCSAFETY (requires G++)
      DEBUG_OS_ERROR
      DEBUG_SPVW
@@ -31,9 +31,8 @@
    Object representation (on 32-bit platforms only):
      TYPECODES, HEAPCODES, STANDARD_HEAPCODES, LINUX_NOEXEC_HEAPCODES, WIDE
    Advanced memory management:
-     NO_SINGLEMAP, NO_TRIVIALMAP, NO_MULTIMAP_FILE, NO_MULTIMAP_SHM,
-     NO_VIRTUAL_MEMORY, CONS_HEAP_GROWS_DOWN, CONS_HEAP_GROWS_UP,
-     NO_MORRIS_GC, NO_GENERATIONAL_GC
+     NO_SINGLEMAP, NO_TRIVIALMAP, NO_VIRTUAL_MEMORY, CONS_HEAP_GROWS_DOWN,
+     CONS_HEAP_GROWS_UP, NO_MORRIS_GC, NO_GENERATIONAL_GC
    String representation:
      NO_SMALL_SSTRING
 
@@ -107,7 +106,7 @@
   #if defined(unix)
     #define GENERIC_UNIX
   #else
-    #error "Unknown machine type -- set machine again!"
+    #error Unknown machine type!
   #endif
 #endif
 /* additional specification of the machine: */
@@ -118,14 +117,8 @@
   #define PC386 /* IBMPC-compatible with 80386/80486-processor */
 #endif
 #ifdef GENERIC_UNIX
-  #if (defined(sun) && defined(unix) && defined(sun386))
-    #define SUN386
-  #endif
   #if (defined(unix) && (defined(linux) || defined(__CYGWIN32__) || defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) || defined(__DragonFly__)) && (defined(i386) || defined(__i386__) || defined(__x86_64__) || defined(__amd64__)))
     #define PC386
-  #endif
-  #if (defined(sun) && defined(unix) && defined(mc68020))
-    #define SUN3
   #endif
   #if (defined(sun) && defined(unix) && defined(sparc))
     #define SUN4
@@ -289,9 +282,6 @@
   #ifdef AUX
     #define UNIX_AUX  /* Apple A/UX, a spiced-up SVR2 */
   #endif
-  #ifdef NeXT
-    #define UNIX_NEXTSTEP  /* NeXTstep */
-  #endif
   #if defined(__APPLE__) && defined(__MACH__)
     #define UNIX_MACOSX  /* MacOS X */
   #endif
@@ -345,16 +335,13 @@
   #define STACK_ADDRESS_RANGE ~0UL
   #define ICONV_CONST
 #else
-  #error "where is the configuration for your platform?"
+  #error where is the configuration for your platform?
 #endif
 
 
 /* A more precise classification of the operating system: */
 #if defined(UNIX) && defined(SIGNALBLOCK_BSD) && !defined(SIGNALBLOCK_SYSV)
   #define UNIX_BSD  /* BSD Unix */
-#endif
-#if (defined(SUN3) || defined(SUN386) || defined(SUN4)) && defined(HAVE_MMAP) && defined(HAVE_VADVISE)
-  #define UNIX_SUNOS4  /* Sun OS Version 4 */
 #endif
 #if (defined(SUN4) || (defined(I80386) && defined(__svr4__) && defined(__sun))) && !defined(HAVE_VADVISE) /* && !defined(HAVE_GETPAGESIZE) */
   #define UNIX_SUNOS5  /* Sun OS Version 5.[1-5] (Solaris 2) */
@@ -390,11 +377,7 @@
   #define HPROMAN8_CHS  /* HP-Roman8, see hproman8.chs */
   /* under X-Term however: #define ISOLATIN_CHS ?? */
 #endif
-#ifdef UNIX_NEXTSTEP
-  #undef ISOLATIN_CHS
-  #define NEXTSTEP_CHS  /* NeXTstep, see nextstep.chs */
-#endif
-#if !(defined(ISOLATIN_CHS) || defined(HPROMAN8_CHS) || defined(NEXTSTEP_CHS))
+#if !(defined(ISOLATIN_CHS) || defined(HPROMAN8_CHS))
   #define ASCII_CHS  /* Default: plain ASCII charset without special chars */
 #endif
 
@@ -402,6 +385,10 @@
 /* Choose the compiler: */
 #if defined(__GNUC__)
   #define GNU
+  /* known bugs */
+  #if defined(__cplusplus) && (__GNUC__ == 4) && ((__GNUC_MINOR__ == 2) || ((__GNUC_MINOR__ == 3) && (__GNUC_PATCHLEVEL__ < 1)))
+    #error g++ 4.2.* and 4.3.0 are not supported due to g++ bug 35708
+  #endif
 #endif
 #if defined(__STDC__) || defined(__BORLANDC__) || defined(__cplusplus)
   /* ANSI C compilers define __STDC__ (but some define __STDC__=0 !).
@@ -472,7 +459,7 @@
 
 /* We don't support pre-ANSI-C compilers any more. */
 #if !defined(ANSI)
-  #error "An ANSI C or C++ compiler is required to compile CLISP!"
+  #error An ANSI C or C++ compiler is required to compile CLISP!
 #endif
 
 /* gcc-2.7.2 has a bug: it interpretes `const' as meaning `not modified by
@@ -497,7 +484,7 @@
   /* Z80, VAX, I80386, DECALPHA, MIPSEL, IA64, AMD64, ...:
    Low Byte is the lowest, High Byte in a higher address */
   #if defined(BIG_ENDIAN_P)
-    #error "Bogus BIG_ENDIAN_P -- set BIG_ENDIAN_P again!"
+    #error Bogus BIG_ENDIAN_P!
   #endif
   #define BIG_ENDIAN_P  0
 #endif
@@ -505,12 +492,12 @@
   /* MC680X0, SPARC, HPPA, MIPSEB, M88000, POWERPC, S390, ...:
    High Byte is the lowest, Low Byte is a higher adress (easier to read) */
   #if defined(BIG_ENDIAN_P)
-    #error "Bogus BIG_ENDIAN_P -- set BIG_ENDIAN_P again"
+    #error Bogus BIG_ENDIAN_P!
   #endif
   #define BIG_ENDIAN_P  1
 #endif
 #if !defined(BIG_ENDIAN_P)
-  #error "Bogus BIG_ENDIAN_P -- set BIG_ENDIAN_P again!"
+  #error Bogus BIG_ENDIAN_P!
 #endif
 %% export_def(BIG_ENDIAN_P);
 
@@ -550,24 +537,10 @@
   #define log2_C_CODE_ALIGNMENT  0
 #endif
 
-
 /* Flags for the system's include files. */
-#ifdef MULTITHREAD
-  #if defined(UNIX_GNU) || defined(UNIX_SUNOS5)
-    #define _REENTRANT
-  #endif
-  #if defined(__GNUC__)
-    #define per_thread __thread
-  #else
-    #error "how does your compiler specify per-thread storage class?"
-  #endif
-#else
-  #define per_thread
-#endif
-
 
 /* Width of object representation:
- WIDE means than an object (pointer) occupies 64 bits (instead of 32 bits).
+   WIDE means than an object (pointer) occupies 64 bits (instead of 32 bits).
  WIDE_HARD means on a 64-bit platform.
  WIDE_SOFT means on a 32-bit platform, each object pointer occupies 2 words.
  WIDE_AUXI means on a 32-bit platform, each object occupies 2 words, the
@@ -598,13 +571,18 @@
    inline function, which is the case on UNIX_DGUX and UNIX_GNU.
    Only GCC supports global register variables. Not Apple's variant of GCC.
    And only the C frontend, not the C++ frontend, understands the syntax.
-   And gcc-3.0 to 3.3 has severe bugs with global register variables, see
+   And gcc-3.0 to 3.3.3 has severe bugs with global register variables, see
    CLISP bugs 710737 and 723097 and
    http://gcc.gnu.org/bugzilla/show_bug.cgi?id=7871
    http://gcc.gnu.org/bugzilla/show_bug.cgi?id=10684
    http://gcc.gnu.org/bugzilla/show_bug.cgi?id=14937
-   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=14938 */
-#if defined(GNU) && !(__APPLE_CC__ > 1) && !defined(__cplusplus) && !(__GNUC__ == 3 && __GNUC_MINOR__ < 4) && !defined(MULTITHREAD) && (SAFETY < 2) && !defined(USE_JITC)
+   http://gcc.gnu.org/bugzilla/show_bug.cgi?id=14938
+   Likewise, gcc-4.2 has severe bugs with global register variables, see
+   CLISP bug 1836142 and http://gcc.gnu.org/bugzilla/show_bug.cgi?id=34300
+   Likewise for gcc-4.3-20080215 and probably future versions of GCC as well.
+   Therefore for these versions of gcc enable the global register variables
+   only when USE_GCC_REGISTER_VARIABLES is explicitly defined.  */
+#if defined(GNU) && !(__APPLE_CC__ > 1) && !defined(__cplusplus) && !(__GNUC__ == 3 && (__GNUC_MINOR__ < 3 || (__GNUC_MINOR__ == 3 && __GNUC_PATCHLEVEL__ < 4))) && !(((__GNUC__ == 4 && __GNUC_MINOR__ >= 2) || __GNUC__ > 4) && !defined(USE_GCC_REGISTER_VARIABLES)) && !defined(MULTITHREAD) && (SAFETY < 2) && !defined(USE_JITC)
 /* Overview of use of registers in gcc terminology:
  fixed: mentioned in FIXED_REGISTERS
  used:  mentioned in CALL_USED_REGISTERS but not FIXED_REGISTERS
@@ -754,7 +732,7 @@
         long back_trace_register_contents;
       #endif
     };
-    extern per_thread struct registers * callback_saved_registers;
+    extern  struct registers * callback_saved_registers;
     #ifdef STACK_register
       #define SAVE_STACK_register(registers)     \
               registers->STACK_register_contents = STACK_reg
@@ -1033,7 +1011,7 @@
    - maygc, if (1) all callers must assume the worst case: that it triggers GC,
             and (2) the function uses only the 'object's passed as arguments and
             on the STACK, but no objects stored in other non-GCsafe locations.
-   - ／＊maygc＊／ otherwise. If (1) is not fulfilled, the functions begins
+   - / * maygc * / otherwise. If (1) is not fulfilled, the functions begins
                    with an appropriate GCTRIGGER_IF statement. If (2) is not
                    fulfilled, the GCTRIGGER call needs to mention all other
                    non-GCsafe locations whose values are used by the function,
@@ -1140,13 +1118,13 @@
   #endif
   typedef unsigned char  UBYTE;
 #else
-  #error "No 8 bit integer type? -- Which Interger-type has 8 Bit?"
+  #error No 8 bit integer type? -- Which Interger-type has 8 Bit?
 #endif
 #if (short_bitsize==16)
   typedef short          SWORD;
   typedef unsigned short UWORD;
 #else
-  #error "No 16 bit integer type? -- Which Integer-type has 16 Bit?"
+  #error No 16 bit integer type? -- Which Integer-type has 16 Bit?
 #endif
 #if (long_bitsize==32)
   typedef long           SLONG;
@@ -1155,7 +1133,7 @@
   typedef int            SLONG;
   typedef unsigned int   ULONG;
 #else
-  #error "No 32 bit integer type? -- Which Integer-type has 32 Bit?"
+  #error No 32 bit integer type? -- Which Integer-type has 32 Bit?
 #endif
 #if (long_bitsize==64)
   typedef long           SLONGLONG;
@@ -1176,7 +1154,7 @@
  #endif
 #endif
 #if defined(WIDE) && !defined(HAVE_LONG_LONG_INT)
-  #error "No 64 bit integer type? -- Which Integer-type has 64 Bit?"
+  #error No 64 bit integer type? -- Which Integer-type has 64 Bit?
 #endif
 %% #ifdef __CHAR_UNSIGNED__
 %%   emit_typedef("signed char","SBYTE");
@@ -1220,8 +1198,10 @@ typedef signed int  signean;
 
 /* Null pointers */
 #ifdef __cplusplus
+  #undef NULL
   #define NULL  0
 #elif !(defined(INTEL) || defined(_AIX))
+  #undef NULL
   #define NULL  ((void*) 0L)
 #endif
 %% puts("#undef NULL");
@@ -1238,10 +1218,8 @@ typedef signed int  signean;
 /* Determine the offset of a component 'ident' in a struct of the type 'type':
  See 0 as pointer to 'type', put a struct 'type' there and determine the
  address of its component 'ident' and return it as number: */
-#if defined(HAVE_OFFSETOF) || defined(__MINGW32__) || (defined(BORLAND) && defined(WIN32)) || defined(MICROSOFT)
-  #include <stddef.h>
-#else
-  #undef offsetof
+#include <stddef.h>
+#ifndef offsetof
   #define offsetof(type,ident)  ((ULONG)&(((type*)0)->ident))
 #endif
 /* Determine the offset of an array 'ident' in a struct of the type 'type': */
@@ -1364,8 +1342,10 @@ typedef signed int  signean;
 
 /* non-local exits */
 #include <setjmp.h>
-#if defined(UNIX) && defined(HAVE__JMP) && !defined(UNIX_LINUX) && !defined(UNIX_GNU) && !defined(UNIX_BEOS) && !defined(UNIX_CYGWIN32)
-  /* The following routines are more efficient (don't use with signal-masks): */
+#if defined(UNIX) && defined(HAVE__JMP)
+  /* The "_" routines are more efficient (do not save/restore signal masks,
+   see http://article.gmane.org/gmane.lisp.clisp.devel/18227 or
+   http://sourceforge.net/mailarchive/message.php?msg_id=200805251238.10097.bruno%40clisp.org): */
   #undef setjmp
   #undef longjmp
   #define setjmp  _setjmp
@@ -1375,6 +1355,17 @@ typedef signed int  signean;
     #undef longjmp
     #define longjmp(x,y)  (_longjmp(x,y), NOTREACHED)
   #endif
+#elif defined(__MINGW32__)
+  /* on mingw:
+    _CRTIMP int __cdecl __MINGW_NOTHROW _setjmp (jmp_buf);
+    #define setjmp(x) _setjmp(x)
+    _CRTIMP void __cdecl __MINGW_NOTHROW longjmp (jmp_buf, int) __MINGW_ATTRIB_NORETURN;
+     so we only need to redefine setjmp, not longjmp.
+     this is actually only necessary for lightning, see
+     http://article.gmane.org/gmane.lisp.clisp.devel:18315
+     http://lists.gnu.org/archive/html/lightning/2008-05/msg00015.html */
+  #undef setjmp
+  #define setjmp  _setjmp
 #endif
 /* A longjmp() can only be called using an `int'.
  But if we want to use a `long' and if sizeof(int) < sizeof(long),
@@ -1615,7 +1606,7 @@ typedef unsigned_int_with_n_bits(pointer_bitsize)  uintP;
   #define intWLsize intLsize
   #define intBWLsize intLsize
 #else
-  #error "Preferred integer sizes depend on CPU -- readjust intBWsize, intWLsize, intBWLsize!"
+  #error Preferred integer sizes depend on CPU -- readjust intBWsize, intWLsize, intBWLsize!
 #endif
 typedef signed_int_with_n_bits(intBWsize)     sintBW;
 typedef unsigned_int_with_n_bits(intBWsize)   uintBW;
@@ -1813,7 +1804,7 @@ typedef unsigned_int_with_n_bits(intBWLsize)  uintBWL;
   #define intDDsize 64  /* = 2*intDsize */
   #define log2_intDsize  5  /* = log2(intDsize) */
 #else
-  #error "Preferred digit size depends on CPU -- readjust intDsize!"
+  #error Preferred digit size depends on CPU -- readjust intDsize!
 #endif
 typedef unsigned_int_with_n_bits(intDsize)  uintD;
 typedef signed_int_with_n_bits(intDsize)    sintD;
@@ -1876,7 +1867,11 @@ typedef signed_int_with_n_bits(intDsize)    sintD;
 #endif
 
 #if defined(WIDE_SOFT) && defined(HEAPCODES)
-  #error "WIDE_SOFT and HEAPCODES make no sense together, no need for WIDE_SOFT"
+  #error WIDE_SOFT and HEAPCODES make no sense together, no need for WIDE_SOFT
+#endif
+
+#if defined(TYPECODES) && defined(HEAPCODES)
+  #error TYPECODES and HEAPCODES make no sense together
 #endif
 
 #if !(defined(TYPECODES) || defined(HEAPCODES))
@@ -1967,7 +1962,7 @@ typedef enum {
 %%   export_def(Handle);
 %%   puts("#include <winsock2.h>"); /* defines SOCKET */
 %% #else
-%%   puts("#error \"what is Handle on your platform?!\"");
+%%   puts("#error what is Handle on your platform?!");
 %% #endif
 %% #if defined(UNIX)
 %%   puts("extern ssize_t fd_read (int fd, void* buf, size_t nbyte, perseverance_t persev);");
@@ -1982,8 +1977,8 @@ typedef enum {
 #if defined(UNIX) || defined(WIN32_NATIVE)
   /* A keyboard interrupt (signal SIGINT, generated by Ctrl-C)
    is pending for one second. It can be treated with 'interruptp' in
-   a continuing manner in that time. After this time has passed, the
-   program will be interrupted and can't be continued.. */
+   a continuable manner in that time. After this time has passed, the
+   program will be interrupted and cannot be continued. */
   #define PENDING_INTERRUPTS
   extern uintB interrupt_pending;
   #define interruptp(statement)  if (interrupt_pending) { statement; }
@@ -1992,7 +1987,7 @@ typedef enum {
 
 #endif /* UNIX || WIN32 */
 
-#if (defined(UNIX) || defined(WIN32_NATIVE)) && !defined(NO_SIGSEGV)
+#if (defined(UNIX) || defined(WIN32_NATIVE)) && defined(HAVE_LIBSIGSEGV)
   /* Support for fault handling. */
   #include <sigsegv.h>
   #if defined(UNIX_CYGWIN32)
@@ -2060,16 +2055,6 @@ typedef enum {
   nonreturning_function(extern, ANSIC_error, (void));
 #endif
 /* used by SPVW, STREAM */
-
-#ifdef MULTITHREAD
-
-#include "xthread.c"
-
-#if !(defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM))
-  #error "Multithreading requires memory mapping facilities!"
-#endif
-
-#endif
 
 /* ##################### Further system-dependencies #################### */
 
@@ -2255,7 +2240,7 @@ typedef enum {
   #define NO_ASYNC_INTERRUPTS
 #endif
 #if defined(NO_ASYNC_INTERRUPTS) && defined(MULTITHREAD)
-  #error "No multithreading possible with this memory model!"
+  #error No multithreading possible with this memory model!
 #endif
 /* When changed: extend SPVW, write a interruptp(). */
 
@@ -2435,10 +2420,10 @@ Long-Float, Ratio and Complex (only if SPVW_MIXED).
 
 #if defined(DEBUG_GCSAFETY)
   #ifndef __cplusplus
-    #error "DEBUG_GCSAFETY works only with a C++ compiler! Reconfigure with CC=g++."
+    #error DEBUG_GCSAFETY works only with a C++ compiler! Reconfigure with CC=g++.
   #endif
   #if defined(WIDE_SOFT) || defined(WIDE_AUXI)
-    #error "DEBUG_GCSAFETY cannot be used together with WIDE_SOFT or WIDE_AUXI (not yet implemented)!"
+    #error DEBUG_GCSAFETY cannot be used together with WIDE_SOFT or WIDE_AUXI (not yet implemented)!
   #endif
   /* The 'gcv_object_t' and 'object' types share the major part of their innards. */
   #ifndef OBJECT_STRUCT
@@ -2852,8 +2837,8 @@ Long-Float, Ratio and Complex (only if SPVW_MIXED).
 /* Now come the 32-bit platforms with TYPECODES. We need to support it only on
  MC680X0 platforms without new gcc.
  It worked on the following platforms in the past, and may still work on:
-   (defined(MC680X0) && !defined(UNIX_AMIX) && !defined(UNIX_NEXTSTEP) && !(defined(UNIX_LINUX) && CODE_ADDRESS_RANGE))
-   (defined(I80386) && !(defined(UNIX_LINUX) && (CODE_ADDRESS_RANGE != 0)) && !defined(UNIX_HURD) && !defined(UNIX_SYSV_UHC_1) && !defined(UNIX_NEXTSTEP) && !defined(UNIX_SYSV_PTX) && !defined(UNIX_SUNOS5) && !defined(UNIX_CYGWIN32) && !defined(WIN32_NATIVE))
+   (defined(MC680X0) && !defined(UNIX_AMIX) && !(defined(UNIX_LINUX) && CODE_ADDRESS_RANGE))
+   (defined(I80386) && !(defined(UNIX_LINUX) && (CODE_ADDRESS_RANGE != 0)) && !defined(UNIX_HURD) && !defined(UNIX_SYSV_UHC_1) && !defined(UNIX_SYSV_PTX) && !defined(UNIX_SUNOS5) && !defined(UNIX_CYGWIN32) && !defined(WIN32_NATIVE))
    (defined(SPARC) && !defined(SUN4_29))
    (defined(MIPS) && !defined(UNIX_IRIX) && !defined(UNIX_DEC_ULTRIX))
    defined(M88000)
@@ -2885,7 +2870,7 @@ Long-Float, Ratio and Complex (only if SPVW_MIXED).
   #define oint_addr_len 24
   #define oint_addr_mask 0x00FFFFFFUL
 #else
-  #error "TYPECODES maybe not supported any more on this platform. Try defining TRY_TYPECODES_1 or TRY_TYPECODES_2, or use -DHEAPCODES."
+  #error TYPECODES maybe not supported any more on this platform. Try defining TRY_TYPECODES_1 or TRY_TYPECODES_2, or use -DHEAPCODES.
 #endif
 %% #if notused
 %%  export_def(oint_type_shift);
@@ -2896,7 +2881,7 @@ Long-Float, Ratio and Complex (only if SPVW_MIXED).
 %%  export_def(oint_addr_mask);
 %% #endif
 #ifndef oint_type_len
-#error "CLISP has not been ported to this platform - oint_type_len undefined"
+#error CLISP has not been ported to this platform - oint_type_len undefined
 #endif
 
 /* Generally we use all of the space of an address for the data of Fixnums etc.
@@ -2969,53 +2954,32 @@ typedef signed_int_with_n_bits(intVsize)  sintV;
  MALLOC_ADDRESS_RANGE values. */
 #if !defined(WIDE_SOFT)
   #if (CODE_ADDRESS_RANGE >> addr_shift) & ~(oint_addr_mask >> oint_addr_shift)
-     #error "oint_addr_mask doesn't cover CODE_ADDRESS_RANGE !!"
+     #error oint_addr_mask does not cover CODE_ADDRESS_RANGE !!
   #endif
   #if (MALLOC_ADDRESS_RANGE >> addr_shift) & ~(oint_addr_mask >> oint_addr_shift)
-     #error "oint_addr_mask doesn't cover MALLOC_ADDRESS_RANGE !!"
+     #error oint_addr_mask does not cover MALLOC_ADDRESS_RANGE !!
   #endif
 #endif
 
 
-#if (oint_addr_shift == 0) && (addr_shift == 0) && defined(TYPECODES) && !defined(WIDE_SOFT) && !(defined(SUN3) && !defined(UNIX_SUNOS4) && !defined(WIDE_SOFT)) && !(defined(AMD64) && defined(UNIX_LINUX))
+#if (oint_addr_shift == 0) && (addr_shift == 0) && defined(TYPECODES) && !defined(WIDE_SOFT) && !(defined(AMD64) && defined(UNIX_LINUX))
 /* If the address bits are the lower ones and not WIDE_SOFT,
  memory mapping may be possible. */
 
-  #if (defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM)) && !defined(MULTIMAP_MEMORY) && !(defined(UNIX_SINIX) || defined(UNIX_AIX)) && !defined(NO_SINGLEMAP)
+  #if (defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM)) && !(defined(UNIX_SINIX) || defined(UNIX_AIX)) && !defined(NO_SINGLEMAP)
     /* Access to LISP-objects is made easier by putting each LISP-object
      to an address that already contains its type information.
      But this does not work on SINIX and AIX. */
       #define SINGLEMAP_MEMORY
   #endif
 
-  #if defined(UNIX_SUNOS4) && !defined(MULTIMAP_MEMORY) && !defined(SINGLEMAP_MEMORY) && !defined(NO_MULTIMAP_FILE)
-    /* Access to Lisp-objects is done through memory-mapping: Each
-     memory page can be accessed at several addresses. */
-      #define MULTIMAP_MEMORY
-      #define MULTIMAP_MEMORY_VIA_FILE
-  #endif
-
-  #if defined(HAVE_SHM) && !defined(MULTIMAP_MEMORY) && !defined(SINGLEMAP_MEMORY) && !defined(NO_MULTIMAP_SHM)
-    /* Access to Lisp-objects is done through memory-mapping: Each
-     memory page can be accessed at several addresses. */
-      #define MULTIMAP_MEMORY
-      #define MULTIMAP_MEMORY_VIA_SHM
-  #endif
-
-  #if (defined(UNIX_LINUX) || defined(UNIX_FREEBSD)) && !defined(MULTIMAP_MEMORY) && !defined(SINGLEMAP_MEMORY) && !defined(NO_MULTIMAP_FILE)
-     /* Access to Lisp-objects is done through memory-mapping: Each
-      memory page can be accessed at several addresses. */
-      #define MULTIMAP_MEMORY
-      #define MULTIMAP_MEMORY_VIA_FILE
-  #endif
-
 #endif
 
-#if defined(MULTIMAP_MEMORY) || defined(SINGLEMAP_MEMORY)
+#if defined(SINGLEMAP_MEMORY)
   #define MAP_MEMORY
 #endif
 
-#if (defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM)) && !defined(MAP_MEMORY) && !(defined(UNIX_HPUX) || defined(UNIX_AIX) || defined(ADDRESS_RANGE_RANDOMIZED)) && !defined(NO_TRIVIALMAP)
+#if (defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM)) && !defined(MAP_MEMORY) && !(defined(UNIX_HPUX) || defined(UNIX_AIX) || defined(ADDRESS_RANGE_RANDOMIZED)) && !defined(NO_TRIVIALMAP) 
   /* mmap() allows for a more flexible way of memory management than malloc().
    It's not really memory-mapping, but a more comfortable way to
    manage two large memory blocks.
@@ -3029,7 +2993,7 @@ typedef signed_int_with_n_bits(intVsize)  sintV;
 
 
 /* Flavor of the garbage collection: normal or generational. */
-#if defined(VIRTUAL_MEMORY) && (defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY) || (defined(MULTIMAP_MEMORY) && (defined(UNIX_LINUX) || defined(UNIX_FREEBSD)))) && defined(HAVE_WORKING_MPROTECT) && defined(HAVE_SIGSEGV_RECOVERY) && !defined(UNIX_IRIX) && !defined(WIDE_SOFT_LARGEFIXNUM) && (SAFETY < 3) && !defined(NO_GENERATIONAL_GC)
+#if defined(VIRTUAL_MEMORY) && (defined(SINGLEMAP_MEMORY) || defined(TRIVIALMAP_MEMORY)) && defined(HAVE_WORKING_MPROTECT) && defined(HAVE_SIGSEGV_RECOVERY) && !defined(UNIX_IRIX) && !defined(WIDE_SOFT_LARGEFIXNUM) && (SAFETY < 3) && !defined(NO_GENERATIONAL_GC)
   /* "generational garbage collection" has some requirements.
    With Linux, it will only work with 1.1.52, and higher, which will be checked in makemake.
    On IRIX 6, it worked in the past, but leads to core dumps now. Reason unknown. FIXME! */
@@ -3622,15 +3586,15 @@ typedef signed_int_with_n_bits(intVsize)  sintV;
 #endif
 /* varobject_alignment should be defined: */
 #ifndef varobject_alignment
-  #error "varobject_alignment depends on CPU -- readjust varobject_alignment!!"
+  #error varobject_alignment depends on CPU -- readjust varobject_alignment!!
 #endif
 /* varobject_alignment should be a power of 2: */
 #if !((varobject_alignment & (varobject_alignment-1)) ==0)
-  #error "Bogus varobject_alignment -- readjust varobject_alignment!!"
+  #error Bogus varobject_alignment -- readjust varobject_alignment!!
 #endif
 /* varobject_alignment should be a multiple of 2^addr_shift : */
 #if (varobject_alignment % bit(addr_shift))
-  #error "Bogus varobject_alignment -- readjust varobject_alignment!!"
+  #error Bogus varobject_alignment -- readjust varobject_alignment!!
 #endif
 %% export_def(varobject_alignment);
 
@@ -3693,7 +3657,7 @@ typedef signed_int_with_n_bits(intVsize)  sintV;
   #define tint_avoid  ((bitm(oint_type_len)-1) & ~tint_allowed_type_mask)
   /* tint_avoid must only contain one bit: */
   #if (tint_avoid & (tint_avoid-1))
-    #error "Bogus oint_type_mask -- oint_type_mask has more than one extraneous bit!!"
+    #error Bogus oint_type_mask -- oint_type_mask has more than one extraneous bit!!
   #endif
   /* tint_avoid consists of exactly one bit that has to be avoided. */
   #if (tint_avoid > bit(0))
@@ -3911,7 +3875,7 @@ typedef signed_int_with_n_bits(intVsize)  sintV;
 #endif /* STANDARD_8BIT_TYPECODES */
 
 #if !(gcinvariant_type_p(ffloat_type) == defined(IMMEDIATE_FFLOAT))
-  #error "gcinvariant_type_p() incorrectly implemented!"
+  #error gcinvariant_type_p() incorrectly implemented!
 #endif
 
 /* Test for gc-invariant object. (This includes immediate, machine, subr.)
@@ -3947,8 +3911,6 @@ typedef signed_int_with_n_bits(intVsize)  sintV;
 /* What's really being sent from an address to the address-bus */
 #if defined(MC68000)
   #define hardware_  0x00FFFFFFUL  /* 68000 drops 8 */
-#elif defined(SUN3) && !defined(UNIX_SUNOS4)
-  #define hardware_addressbus_mask  0x0FFFFFFFUL  /* SUN3 unter SunOS 3.5 wirft 4 Bits weg */
 #else
   #define hardware_addressbus_mask  ~0UL  /* Default: nothing is dropped */
 #endif
@@ -4262,16 +4224,13 @@ extern bool inside_gc;
 #else
   #define SPVW_BLOCKS
 #endif
-#if defined(MULTIMAP_MEMORY)
-  /* MULTIMAP_MEMORY -> Mixed pages allow a better usage of memory. */
-  #define SPVW_MIXED
-#elif defined(SINGLEMAP_MEMORY)
+#if defined(SINGLEMAP_MEMORY)
   /* SINGLEMAP_MEMORY -> Ony pure pages/blocks make sense, since
    the address of a page determines the type of the objects it contains. */
   #define SPVW_PURE
-#elif !defined(TYPECODES) || defined(MC68000) || defined(SUN3) || defined(SPVW_BLOCKS) || defined(TRIVIALMAP_MEMORY)
+#elif !defined(TYPECODES) || defined(MC68000) || defined(SPVW_BLOCKS) || defined(TRIVIALMAP_MEMORY)
   /* !TYPECODES -> there aren't real typecodes, only Cons and Varobject.
-   MC68000 or SUN3 -> type_pointable(...) costs little or nothing.
+   MC68000 -> type_pointable(...) costs little or nothing.
    SPVW_BLOCKS -> SPVW_PURE_BLOCKS is only implemented for SINGLEMAP_MEMORY.
    TRIVIALMAP_MEMORY -> not many blocks available, small adress space. */
   #define SPVW_MIXED
@@ -4279,34 +4238,32 @@ extern bool inside_gc;
   #define SPVW_MIXED
 #endif
 #if !(defined(SPVW_BLOCKS) || defined(SPVW_PAGES))
-  #error "readjust SPVW_BLOCKS/SPVW_PAGES!"
+  #error readjust SPVW_BLOCKS/SPVW_PAGES!
 #endif
 #if !(defined(SPVW_MIXED) || defined(SPVW_PURE))
-  #error "readjust SPVW_MIXED/SPVW_PURE!"
+  #error readjust SPVW_MIXED/SPVW_PURE!
 #endif
 #if (defined(SPVW_BLOCKS) && defined(SPVW_PURE)) != defined(SINGLEMAP_MEMORY)
-  #error "SINGLEMAP_MEMORY <==> SPVW_PURE_BLOCKS!"
+  #error SINGLEMAP_MEMORY <==> SPVW_PURE_BLOCKS!
 #endif
 #if (defined(SPVW_BLOCKS) && defined(SPVW_MIXED)) < defined(TRIVIALMAP_MEMORY)
-  #error "TRIVIALMAP_MEMORY ==> SPVW_MIXED_BLOCKS!"
+  #error TRIVIALMAP_MEMORY ==> SPVW_MIXED_BLOCKS!
 #endif
 #if defined(SPVW_PURE) && !defined(TYPECODES)
-  #error "SPVW_PURE ==> TYPECODES!"
+  #error SPVW_PURE ==> TYPECODES!
 #endif
 #if (defined(SPVW_BLOCKS) && (defined(SPVW_PURE) || defined(SPVW_MIXED))) < defined(GENERATIONAL_GC)
-  #error "GENERATIONAL_GC ==> SPVW_PURE_BLOCKS or SPVW_MIXED_BLOCKS_STAGGERED or SPVW_MIXED_BLOCKS_OPPOSITE!"
+  #error GENERATIONAL_GC ==> SPVW_PURE_BLOCKS or SPVW_MIXED_BLOCKS_STAGGERED or SPVW_MIXED_BLOCKS_OPPOSITE!
 #endif
 
 /* Algorithm by Morris, that compacts Conses without mixing them up: */
-#if defined(SPVW_BLOCKS) && defined(VIRTUAL_MEMORY) && !defined(NO_MORRIS_GC)
+#if defined(SPVW_BLOCKS) && defined(VIRTUAL_MEMORY) && !defined(NO_MORRIS_GC) /*&& !defined(MULTITHREAD) */
   /* Morris-GC is recommended, as it preserves the locality. */
   #define MORRIS_GC
 #endif
 
-/* Put subr_tab and symbol_tab to given addresses through memory-mapping.
- (The Morris-GC uses the macro upointer() for MULTIMAP_MEMORY. For
- &symbol_tab = 0x20000000 it'd be upointer(NIL)=0. Darn!) */
-#if defined(MAP_MEMORY) && !defined(WIDE_SOFT) && !(defined(MULTIMAP_MEMORY) && defined(MORRIS_GC))
+/* Put subr_tab and symbol_tab to given addresses through memory-mapping. */
+#if defined(MAP_MEMORY) && !defined(WIDE_SOFT)
   #define MAP_MEMORY_TABLES
 #endif
 
@@ -4501,7 +4458,7 @@ typedef varobject_ *  Varobject;
     #define GCself  header._GCself
     /* The typecode can be found in the byte ((Varobject)p)->header_flags. */
     #if !(oint_type_len>=hfintsize ? oint_type_shift%hfintsize==0 : floor(oint_type_shift,hfintsize)==floor(oint_type_shift+oint_type_len-1,hfintsize))
-      #error "Bogus header_flags -- redefine header_flags!"
+      #error Bogus header_flags -- redefine header_flags!
     #endif
     #if BIG_ENDIAN_P
       #define header_flags  header.flags[sizeof(gcv_object_t)/sizeof(hfint)-1-floor(oint_type_shift,hfintsize)]
@@ -6104,6 +6061,7 @@ typedef struct {
 %%   emit_typedef("struct { XRECORD_HEADER void* fp_pointer;} *","Fpointer");
 %%   export_def(fp_validp(ptr));
 %%   export_def(mark_fp_invalid(ptr));
+%%   export_def(mark_fp_valid(ptr));
 %% #endif
 
 #ifdef DYNAMIC_FFI
@@ -6121,6 +6079,7 @@ typedef struct {
 typedef struct {
   XRECORD_HEADER
   gcv_object_t fv_name    _attribute_aligned_object_;
+  gcv_object_t fv_version _attribute_aligned_object_;
   gcv_object_t fv_address _attribute_aligned_object_;
   gcv_object_t fv_size    _attribute_aligned_object_;
   gcv_object_t fv_type    _attribute_aligned_object_;
@@ -6131,6 +6090,7 @@ typedef struct {
 typedef struct {
   XRECORD_HEADER
   gcv_object_t ff_name       _attribute_aligned_object_;
+  gcv_object_t ff_version    _attribute_aligned_object_;
   gcv_object_t ff_address    _attribute_aligned_object_;
   gcv_object_t ff_resulttype _attribute_aligned_object_;
   gcv_object_t ff_argtypes   _attribute_aligned_object_;
@@ -6294,7 +6254,7 @@ typedef struct {
     /* Because of space requirements, I have to put strmflags and strmtype
      into a fixnum in recdata[0]. */
     #if !((oint_addr_len+oint_addr_shift>=24) && (8>=oint_addr_shift))
-      #error "No room for stream flags -- re-accommodate Stream-Flags!!"
+      #error No room for stream flags -- re-accommodate Stream-Flags!!
     #endif
     XRECORD_HEADER
     #if defined(WIDE) && BIG_ENDIAN_P
@@ -6520,7 +6480,7 @@ typedef struct {
   gcv_object_t slotdef_allocation         _attribute_aligned_object_;
   gcv_object_t slotdef_inheritable_initer _attribute_aligned_object_;
   gcv_object_t slotdef_inheritable_doc    _attribute_aligned_object_;
-  /* from here on only for class ⊆ <effective-slot-definition> */
+  /* from here on only for subclasses of <effective-slot-definition> */
   gcv_object_t slotdef_location           _attribute_aligned_object_;
   gcv_object_t slotdef_efm_svuc           _attribute_aligned_object_;
   gcv_object_t slotdef_efm_ssvuc          _attribute_aligned_object_;
@@ -6536,7 +6496,7 @@ typedef struct {
   gcv_object_t direct_methods           _attribute_aligned_object_; /* set of methods that use this specializer */
   gcv_object_t classname                _attribute_aligned_object_; /* a symbol */
   gcv_object_t direct_subclasses        _attribute_aligned_object_; /* weak-list or weak-hash-table of all direct subclasses */
-  /* from here on only for metaclass ⊆ <defined-class> */
+  /* from here on only for subclasses of <defined-class> */
   gcv_object_t direct_superclasses      _attribute_aligned_object_; /* direct superclasses */
   gcv_object_t all_superclasses         _attribute_aligned_object_; /* all superclasses, including itself */
   gcv_object_t precedence_list          _attribute_aligned_object_; /* ordered list of all superclasses */
@@ -6548,13 +6508,13 @@ typedef struct {
   gcv_object_t documentation            _attribute_aligned_object_; /* string or NIL */
   gcv_object_t listeners                _attribute_aligned_object_; /* list of objects to be notified upon a change */
   gcv_object_t initialized              _attribute_aligned_object_; /* describes which parts of the class are initialized */
-  /* from here on only for metaclass ⊆ <standard-class> or metaclass ⊆ <funcallable-standard-class> or metaclass ⊆ <structure-class> */
+  /* from here on only for subclasses of <standard-class> or <funcallable-standard-class> or <structure-class> */
   gcv_object_t subclass_of_stablehash_p _attribute_aligned_object_; /* true if <standard-stablehash> or <structure-stablehash> is among the superclasses */
   gcv_object_t generic_accessors        _attribute_aligned_object_;
   gcv_object_t direct_accessors         _attribute_aligned_object_;
   gcv_object_t valid_initargs_from_slots _attribute_aligned_object_;
   gcv_object_t instance_size            _attribute_aligned_object_;
-  /* from here on only for metaclass ⊆ <standard-class> or metaclass ⊆ <funcallable-standard-class> */
+  /* from here on only for subclasses of <standard-class> or <funcallable-standard-class> */
   gcv_object_t current_version          _attribute_aligned_object_; /* most recent class-version, points back to this class */
   gcv_object_t funcallablep             _attribute_aligned_object_;
   gcv_object_t fixed_slot_locations     _attribute_aligned_object_;
@@ -6562,7 +6522,7 @@ typedef struct {
   gcv_object_t direct_instance_specializers _attribute_aligned_object_;
   gcv_object_t finalized_direct_subclasses _attribute_aligned_object_; /* weak-list or weak-hash-table of all finalized direct subclasses */
   gcv_object_t prototype                _attribute_aligned_object_; /* class prototype - an instance or NIL */
-  /* from here on only for metaclass ⊆ <standard-class> */
+  /* from here on only for subclasses of <standard-class> */
   gcv_object_t other[unspecified]       _attribute_aligned_object_;
 } *  Class;
 
@@ -6876,6 +6836,8 @@ typedef enum {
 
 #ifdef MULTITHREAD
 
+#include "xthread.c"
+
 typedef struct {
   XRECORD_HEADER
   gcv_object_t xth_name _attribute_aligned_object_; /* name */
@@ -6952,22 +6914,22 @@ typedef struct {
     if (!(gcinvariant_object_p(obj) || gcinvariant_symbol_p(obj)
           || obj.allocstamp == alloccount || nonimmsubrp(obj)))
       abort();
-    nonimmprobe(obj.one_o);
+    nonimmprobe(pointable_address_unchecked(obj.one_o));
     return obj.one_o;
   }
   static inline aint pgci_pointable (gcv_object_t obj) {
-    nonimmprobe(obj.one_o);
+    nonimmprobe(pointable_address_unchecked(obj.one_o));
     return obj.one_o;
   }
   static inline aint ngci_pointable (object obj) {
     if (!(gcinvariant_symbol_p(obj)
           || obj.allocstamp == alloccount || nonimmsubrp(obj)))
       abort();
-    nonimmprobe(obj.one_o);
+    nonimmprobe(pointable_address_unchecked(obj.one_o));
     return obj.one_o;
   }
   static inline aint ngci_pointable (gcv_object_t obj) {
-    nonimmprobe(obj.one_o);
+    nonimmprobe(pointable_address_unchecked(obj.one_o));
     return obj.one_o;
   }
 #elif defined(WIDE_AUXI)
@@ -6982,10 +6944,10 @@ typedef struct {
 %% #if defined(DEBUG_GCSAFETY)
 %%   puts("static inline aint cgci_pointable (object obj) { return obj.one_o; }");
 %%   puts("static inline aint cgci_pointable (gcv_object_t obj) { return obj.one_o; }");
-%%   puts("static inline aint pgci_pointable (object obj) { if (!(gcinvariant_object_p(obj) || gcinvariant_symbol_p(obj) || obj.allocstamp == alloccount || nonimmsubrp(obj))) abort(); nonimmprobe(obj.one_o); return obj.one_o; }");
-%%   puts("static inline aint pgci_pointable (gcv_object_t obj) { nonimmprobe(obj.one_o); return obj.one_o; }");
-%%   puts("static inline aint ngci_pointable (object obj) { if (!(gcinvariant_symbol_p(obj) || obj.allocstamp == alloccount || nonimmsubrp(obj))) abort(); nonimmprobe(obj.one_o); return obj.one_o; }");
-%%   puts("static inline aint ngci_pointable (gcv_object_t obj) { nonimmprobe(obj.one_o); return obj.one_o; }");
+%%   puts("static inline aint pgci_pointable (object obj) { if (!(gcinvariant_object_p(obj) || gcinvariant_symbol_p(obj) || obj.allocstamp == alloccount || nonimmsubrp(obj))) abort(); nonimmprobe(pointable_address_unchecked(obj.one_o)); return obj.one_o; }");
+%%   puts("static inline aint pgci_pointable (gcv_object_t obj) { nonimmprobe(pointable_address_unchecked(obj.one_o)); return obj.one_o; }");
+%%   puts("static inline aint ngci_pointable (object obj) { if (!(gcinvariant_symbol_p(obj) || obj.allocstamp == alloccount || nonimmsubrp(obj))) abort(); nonimmprobe(pointable_address_unchecked(obj.one_o)); return obj.one_o; }");
+%%   puts("static inline aint ngci_pointable (gcv_object_t obj) { nonimmprobe(pointable_address_unchecked(obj.one_o)); return obj.one_o; }");
 %% #else
 %%   export_def(cgci_pointable(obj));
 %%   export_def(pgci_pointable(obj));
@@ -6997,9 +6959,9 @@ typedef struct {
  The other type conversions are similar. */
 #ifdef TYPECODES
   #ifdef DEBUG_GCSAFETY
-    #define cgci_types_pointable(ORed_types,obj)  cgci_pointable(obj)
-    #define pgci_types_pointable(ORed_types,obj)  pgci_pointable(obj)
-    #define ngci_types_pointable(ORed_types,obj)  ngci_pointable(obj)
+    #define cgci_types_pointable(ORed_types,obj)  pointable_address_unchecked(cgci_pointable(obj))
+    #define pgci_types_pointable(ORed_types,obj)  pointable_address_unchecked(pgci_pointable(obj))
+    #define ngci_types_pointable(ORed_types,obj)  pointable_address_unchecked(ngci_pointable(obj))
   #else
     #define cgci_types_pointable(ORed_types,obj)  types_pointable(ORed_types,obj)
     #define pgci_types_pointable(ORed_types,obj)  types_pointable(ORed_types,obj)
@@ -8782,6 +8744,11 @@ typedef struct {
 extern void get_running_times (timescore_t*);
 /* is used by TIME */
 
+/* Converts an internal_time_t to a Lisp integer.
+ internal_time_to_I(&it) */
+extern object internal_time_to_I (const internal_time_t* tp);
+/* used by TIME, DEBUG */
+
 /* UP: yields the run-time
  get_running_time(runtime);
  < runtime: Run-time (in Ticks) */
@@ -8946,6 +8913,9 @@ All other long words on the LISP-Stack are LISP-objects.
     #define SP_register "15"
   #endif
 #endif
+/* VTZ: in multithreaded builds we really need a way to change stack pointer. 
+ So even in case we have NO_ASM - we will use this (with simple search it apears that 
+ these macros are used only in MT anyway) */
 #if (defined(GNU) || defined(INTEL)) && !defined(NO_ASM)
   /* Assembler-instruction that copies the SP-register into a variable. */
   #ifdef MC680X0
@@ -8975,7 +8945,8 @@ All other long words on the LISP-Stack are LISP-objects.
     #define ASM_get_SP_register(resultvar)  ("or %0,#r0,#r31" : "=r" (resultvar) : )
   #endif
   #ifdef POWERPC
-    #define ASM_get_SP_register(resultvar)  ("mr %0,1" : "=r" (resultvar) : )
+    #define ASM_get_SP_register(resultvar)  ("mr %0,r1" : "=r" (resultvar) : )
+    #define set_SP_register(newval)  ({ __asm__ __volatile__ ("mr r1,%0" : : "r" (newval) ); })
   #endif
   #ifdef ARM
     #define ASM_get_SP_register(resultvar)  ("mov\t%0, sp" : "=r" (resultvar) : )
@@ -8985,12 +8956,14 @@ All other long words on the LISP-Stack are LISP-objects.
   #endif
   #ifdef I80386
     #define ASM_get_SP_register(resultvar)  ("movl %%esp,%0" : "=g" (resultvar) : )
+    #define set_SP_register(newval)  ({ __asm__ __volatile__ ("movl %0,%%esp" : : "r" (newval) ); })
   #endif
   #ifdef IA64
     #define ASM_get_SP_register(resultvar)  ("mov %0 = r12" : "=r" (resultvar) : )
   #endif
   #ifdef AMD64
     #define ASM_get_SP_register(resultvar)  ("movq %%rsp,%0" : "=g" (resultvar) : )
+    #define set_SP_register(newval)  ({ __asm__ __volatile__ ("movq %0,%%rsp" : : "r" (newval) ); })
   #endif
   #ifdef S390
     #define ASM_get_SP_register(resultvar)  ("lr %0,%%r15" : "=r" (resultvar) : )
@@ -9058,7 +9031,7 @@ All other long words on the LISP-Stack are LISP-objects.
   #define SPoffset -1 /* top-of-SP ist *(SP+SPoffset) */
 #endif
 #if (defined(SP_DOWN) && defined(SP_UP)) || (!defined(SP_DOWN) && !defined(SP_UP))
-  #error "Unknown SP direction -- readjust SP_DOWN/SP_UP!"
+  #error Unknown SP direction -- readjust SP_DOWN/SP_UP!
 #endif
 /* Derived from that:
  SPint  is the type of the elements on the SP, an Integer type at least as
@@ -9146,7 +9119,7 @@ extern void* SP_anchor;
 /* LISP-Stack: STACK */
 #if !defined(STACK_register)
   /* a global variable */
-  extern per_thread gcv_object_t* STACK;
+  extern  gcv_object_t* STACK;
 #else
   /* a global register variable */
   register gcv_object_t* STACK __asm__(STACK_register);
@@ -9165,7 +9138,7 @@ extern void* SP_anchor;
   #define STACK_UP /* STACK grows upward */
 #endif
 #if (defined(STACK_DOWN) && defined(STACK_UP)) || (!defined(STACK_DOWN) && !defined(STACK_UP))
-  #error "Unknown STACK direction -- readjust STACK_DOWN/STACK_UP!"
+  #error Unknown STACK direction -- readjust STACK_DOWN/STACK_UP!
 #endif
 %% #if !defined(STACK_register)
 %%   puts("extern gcv_object_t* STACK;");
@@ -9300,7 +9273,7 @@ extern gcv_object_t* top_of_back_trace_frame (const struct backtrace_t *bt);
  and
    end_callback(); */
 #ifdef HAVE_SAVED_mv_count
-  extern per_thread uintC saved_mv_count;
+  extern  uintC saved_mv_count;
   #define SAVE_mv_count()     saved_mv_count = mv_count
   #define RESTORE_mv_count()  mv_count = saved_mv_count
 #else
@@ -9308,7 +9281,7 @@ extern gcv_object_t* top_of_back_trace_frame (const struct backtrace_t *bt);
   #define RESTORE_mv_count()
 #endif
 #ifdef HAVE_SAVED_value1
-  extern per_thread object saved_value1;
+  extern  object saved_value1;
   #define SAVE_value1()     saved_value1 = value1
   #define RESTORE_value1()  value1 = saved_value1
 #else
@@ -9316,7 +9289,7 @@ extern gcv_object_t* top_of_back_trace_frame (const struct backtrace_t *bt);
   #define RESTORE_value1()
 #endif
 #ifdef HAVE_SAVED_back_trace
-  extern per_thread p_backtrace_t saved_back_trace;
+  extern  p_backtrace_t saved_back_trace;
   #define SAVE_back_trace()     saved_back_trace = back_trace
   #define RESTORE_back_trace()  back_trace = saved_back_trace
 #else
@@ -9326,7 +9299,7 @@ extern gcv_object_t* top_of_back_trace_frame (const struct backtrace_t *bt);
 #define SAVE_GLOBALS()     SAVE_mv_count(); SAVE_value1(); SAVE_back_trace();
 #define RESTORE_GLOBALS()  RESTORE_mv_count(); RESTORE_value1(); RESTORE_back_trace();
 #if defined(HAVE_SAVED_STACK)
-  extern per_thread gcv_object_t* saved_STACK;
+  extern  gcv_object_t* saved_STACK;
   #define begin_call()  SAVE_GLOBALS(); saved_STACK = STACK
   #define end_call()  RESTORE_GLOBALS(); saved_STACK = (gcv_object_t*)NULL
   #define begin_callback()  SAVE_REGISTERS( STACK = saved_STACK; ); end_call()
@@ -9444,7 +9417,7 @@ extern gcv_object_t* top_of_back_trace_frame (const struct backtrace_t *bt);
     #endif
   #endif
 #endif
-extern per_thread void* SP_bound;
+extern  void* SP_bound;
 nonreturning_function(extern, SP_ueber, (void));
 #ifdef UNIX
   #define check_SP_notUNIX()
@@ -9461,8 +9434,8 @@ nonreturning_function(extern, SP_ueber, (void));
 #ifdef STACK_UP
   #define STACK_overflow()  ( (aint)STACK > (aint)STACK_bound )
 #endif
-extern per_thread void* STACK_bound;
-extern per_thread void* STACK_start;
+extern  void* STACK_bound;
+extern  void* STACK_start;
 nonreturning_function(extern, STACK_ueber, (void));
 %% #if notused
 %% export_def(check_STACK());
@@ -9577,13 +9550,13 @@ extern maygc object object_out (object obj);
  this can trigger GC, but will save and restore OBJ */
 #define OBJECT_OUT(obj,label)                                           \
   (printf("[%s:%d] %s: %s:\n",__FILE__,__LINE__,STRING(obj),label),     \
-   obj=object_out(obj))
+   fflush(stdout), obj=object_out(obj))
 /* print the object to a C stream - not all objects can be handled yet!
  non-consing, STACK non-modifying */
 extern maygc object nobject_out (FILE* out, object obj);
 #define NOBJECT_OUT(obj,label)                                         \
   (printf("[%s:%d] %s: %s: ",__FILE__,__LINE__,STRING(obj),label),     \
-   nobject_out(stdout,obj), printf("\n"))
+   nobject_out(stdout,obj), printf("\n"), fflush(stdout))
 /* used for debugging purposes */
 %% puts("extern object object_out (object obj);");
 %% puts("#define OBJECT_OUT(obj,label)  (printf(\"[%s:%d] %s: %s:\\n\",__FILE__,__LINE__,STRING(obj),label),obj=object_out(obj))");
@@ -9601,9 +9574,10 @@ extern maygc object nobject_out (FILE* out, object obj);
 /* used by SPVW, macros SP_allocate_bit_vector, SP_allocate_string */
 
 /* UP: executes a Garbage Collection
- gar_col();
+ gar_col(level);
+ > level: if 1, also drop all jitc code
  can trigger GC */
-extern maygc void gar_col(void);
+extern maygc void gar_col (int level);
 /* is used by DEBUG */
 
 /* GC-statistics */
@@ -10334,9 +10308,7 @@ extern uintL asciz_length (const char * asciz);
      require a begin_system_call()/end_system_call() . */
   #else
     /* let us presume, that strlen() is implemented efficiently. */
-    #ifdef STDC_HEADERS
-      #include <string.h> /* declares strlen() */
-    #endif
+    #include <string.h> /* declares strlen() */
     #define asciz_length(a)  ((uintL)strlen(a))
   #endif
 #endif
@@ -10743,7 +10715,6 @@ static inline bool gcinvariant_symbol_p (object obj) {
            as_oint(obj) - varobject_bias
          #endif
        #else
-         /* FIXME: MAP_MEMORY_TABLES possibly uses MULTIMAP_MEMORY_SYMBOL_TAB. */
          as_oint(obj)
        #endif
        - (aint)&symbol_tab < sizeof(symbol_tab))
@@ -10820,7 +10791,7 @@ extern struct object_tab_ {
   /* if you want DYNAMIC_MODULES to work on a non-WIN32_NATIVE platform
      which does not HAVE_DYNLOAD (e.g., via ltdl), you will need to
      implement libopen() and find_name() in spvw.d for your platform */
-  #error "Dynamic modules require dynamic loading!"
+  #error Dynamic modules require dynamic loading!
 #endif
 
 /* Number of external modules: */
@@ -11487,6 +11458,7 @@ re-enters the corresponding top-level loop.
 
  Highest number of multiple values + 1 */
 #define mv_limit  128
+
 /* Values are always passed in the MULTIPLE_VALUE_SPACE mv_space:
  uintC mv_count : number of values, >=0, <mv_limit
  object mv_space [mv_limit-1] : the values.
@@ -11495,12 +11467,12 @@ re-enters the corresponding top-level loop.
    The values in mv_space are not subject to the Garbage Collection! */
 #if !defined(mv_count_register)
   /* a global Variable */
-  extern per_thread uintC mv_count;
+  extern  uintC mv_count;
 #else
   /* a global register */
   register uintC mv_count __asm__(mv_count_register);
 #endif
-extern per_thread object mv_space [mv_limit-1];
+extern  object mv_space [mv_limit-1];
 /* Synonyms: */
 #if !defined(value1_register)
     #define value1  mv_space[0]
@@ -11520,7 +11492,7 @@ extern per_thread object mv_space [mv_limit-1];
 #define value9  mv_space[8]
 /* You might need global variables to pass with setjmp/longjmp: */
 #ifdef NEED_temp_mv_count
-  extern per_thread uintC temp_mv_count;
+  extern  uintC temp_mv_count;
   #define LONGJMP_SAVE_mv_count()  temp_mv_count = mv_count
   #define LONGJMP_RESTORE_mv_count()  mv_count = temp_mv_count
 #else
@@ -11528,7 +11500,7 @@ extern per_thread object mv_space [mv_limit-1];
   #define LONGJMP_RESTORE_mv_count()
 #endif
 #ifdef NEED_temp_value1
-  extern per_thread object temp_value1;
+  extern  object temp_value1;
   #define LONGJMP_SAVE_value1()  temp_value1 = value1
   #define LONGJMP_RESTORE_value1()  value1 = temp_value1
 #else
@@ -11537,6 +11509,7 @@ extern per_thread object mv_space [mv_limit-1];
 #endif
 /* is used by EVAL, CONTROL,
                     Macros LIST_TO_MV, MV_TO_LIST, STACK_TO_MV, MV_TO_STACK */
+%% #if !defined(MULTITHREAD)
 %% #if notused
 %% export_def(mv_limit);
 %% #endif
@@ -11559,6 +11532,7 @@ extern per_thread object mv_space [mv_limit-1];
 %%   for (; i <=9 ; i++)
 %%     printf("#define value%d  mv_space[%d]\n",i,i-1);
 %% }
+%% #endif
 
 #ifdef DEBUG_GCSAFETY
   /* Add support for the 'mv_space' expression to the GCTRIGGER1/2/... macros. */
@@ -11699,7 +11673,7 @@ nonreturning_function(extern, error_mv_toomany, (object caller));
 %% #endif
 
 #if !defined(back_trace_register)
-  extern per_thread p_backtrace_t back_trace;
+  extern  p_backtrace_t back_trace;
 #else
   register p_backtrace_t back_trace __asm__(back_trace_register);
 #endif
@@ -11760,6 +11734,7 @@ nonreturning_function(extern, error_mv_toomany, (object caller));
  but without changing the value of pointer. */
 #define Next(pointer)  (*(STACKpointable(pointer) STACKop -1))
 #define Before(pointer)  (*(STACKpointable(pointer) STACKop 0))
+%% #if !defined(MULTITHREAD)
 %% emit_define("args_end_pointer","STACK");
 %% #if notused
 %% emit_define("set_args_end_pointer(new_args_end_pointer)","STACK = (new_args_end_pointer)");
@@ -11767,6 +11742,7 @@ nonreturning_function(extern, error_mv_toomany, (object caller));
 %% export_def(BEFORE(argpointer));
 %% emit_define("Next(pointer)","(*(STACKpointable(pointer) STACKop -1))");
 %% emit_define("Before(pointer)","(*(STACKpointable(pointer) STACKop 0))");
+%% #endif
 %% #endif
 
 /* Environments: */
@@ -11787,7 +11763,7 @@ typedef struct {
 } gcv_environment_t;
 
 /* The current Environment: */
-extern per_thread gcv_environment_t aktenv;
+extern  gcv_environment_t aktenv;
 
 /* Macro: Puts five single Environments on the STACK
  and makes a single Environment out of them.
@@ -12034,7 +12010,7 @@ extern per_thread gcv_environment_t aktenv;
 /* Bits for Symbols in VAR-Frames:
  bit(active_bit),bit(dynam_bit),bit(svar_bit) must fit into one uintB: */
 #if !((active_bit<intBsize) && (dynam_bit<intBsize) && (svar_bit<intBsize))
-  #error "Symbol bits don't fit in a single byte -- Symbol-Bits passen nicht in ein Byte!"
+  #error Symbol bits do not fit in a single byte -- Symbol-Bits passen nicht in ein Byte!
 #endif
 #ifdef NO_symbolflags
   /* Bits are separatly stored on the Stack as Fixnums. */
@@ -12045,7 +12021,7 @@ extern per_thread gcv_environment_t aktenv;
     /* bit(active_bit),bit(dynam_bit),bit(svar_bit) must be true divisors
      of varobject_alignment: */
     #if (varobject_alignment % bit(active_bit+1)) || (varobject_alignment % bit(dynam_bit+1)) || (varobject_alignment % bit(svar_bit+1))
-      #error "No more room for three bits in a symbol -- Kein Platz fuer drei Bits in der Adresse eines Symbols!"
+      #error No more room for three bits in a symbol -- Kein Platz fuer drei Bits in der Adresse eines Symbols!
     #endif
   #endif
 #endif
@@ -12332,6 +12308,13 @@ extern maygc Values eval_noenv (object form);
 extern maygc Values eval_no_hooks (object form);
 /* is used by CONTROL */
 
+/* UP: signal an error on a dotted form in EVAL
+ error_dotted_form(form,fun)
+ > form: full form being evaluated
+ > fun: caller (car form) */
+nonreturning_function(global, error_dotted_form, (object form, object fun));
+/* is used by CONTROL */
+
 /* UP: binds *EVALHOOK* and *APPLYHOOK* dynamically to the given values.
  bindhooks(evalhook_value,applyhook_value);
  > evalhook_value: Value for *EVALHOOK*
@@ -12359,7 +12342,7 @@ typedef struct {
   restartf_t fun;
   gcv_object_t* upto_frame;
 } unwind_protect_caller_t;
-extern per_thread unwind_protect_caller_t unwind_protect_to_save;
+extern  unwind_protect_caller_t unwind_protect_to_save;
 extern /*maygc*/ void unwind (void);
 /* is used by CONTROL, DEBUG, SPVW */
 
@@ -12407,13 +12390,13 @@ typedef struct {
   SPint* sp;
   object spdepth;
 } handler_args_t;
-extern per_thread handler_args_t handler_args;
+extern  handler_args_t handler_args;
 typedef struct stack_range_t {
   struct stack_range_t * next;
   gcv_object_t* low_limit;
   gcv_object_t* high_limit;
 } stack_range_t;
-extern per_thread stack_range_t* inactive_handlers;
+extern  stack_range_t* inactive_handlers;
 /* is used by ERROR */
 
 /* UP: Determines, whether an Object is a function name, ie. a Symbol or
@@ -12666,9 +12649,13 @@ extern maygc object coerce_function (object obj);
 extern maygc void init_cclosures (void);
 
 #if defined(USE_JITC)
+#if defined(TYPECODES)
+  #error USE_JITC requires HEAPCODES
+#endif
 /* GC hooks for JIT code */
 extern void gc_mark_jitc_object (void *ptr);
 extern void gc_scan_jitc_objects (void);
+extern bool gc_drop_jitc;
 #endif
 
 /* ##################### CTRLBIBL for CONTROL.D ############################ */
@@ -12709,11 +12696,11 @@ nonreturning_function(extern, error_block_left, (object name));
 #ifndef COMPILE_STANDALONE
 static inline object seclass_object (seclass_t sec) {
   switch (sec) {
-    case seclass_foldable: return NIL;
-    case seclass_no_se:    return O(seclass_no_se);
-    case seclass_read:     return O(seclass_read);
-    case seclass_write:    return O(seclass_write);
-    case seclass_default:  return O(seclass_default);
+    case seclass_foldable: { return NIL; }
+    case seclass_no_se:    { return O(seclass_no_se); }
+    case seclass_read:     { return O(seclass_read); }
+    case seclass_write:    { return O(seclass_write); }
+    case seclass_default:  { return O(seclass_default); }
     default: NOTREACHED;
   }
 }
@@ -14169,6 +14156,7 @@ extern uintL llength1 (object obj, object* last);
 /* used in SEQUENCE */
 #define llength(obj)  llength1(obj,NULL)
 /* used by CONTROL, EVAL, RECORD, IO, PACKAGE, HASHTABL, STREAM */
+%% puts("extern uintL llength1 (object obj, object* last);");
 
 /* UP: Makes a list with exactly len elements
  make_list(len)
@@ -14322,8 +14310,7 @@ typedef enum {
       storage_condition, /* "Virtual memory exhausted" */
       interrupt_condition, /* "User break" */
     warning, /* conditions for which user notification is appropriate */
-  /* junk */
-  condition_for_broken_compilers_that_dont_like_trailing_commas
+  number_of_conditions_defined_in_c
 } condition_t;
 %% printf("typedef enum { condition=%d, serious_condition=%d, error_condition=%d, program_error=%d, source_program_error=%d, control_error=%d, arithmetic_error=%d, division_by_zero=%d, floating_point_overflow=%d, floating_point_underflow=%d, cell_error=%d, unbound_variable=%d, undefined_function=%d, unbound_slot=%d, type_error=%d, keyword_error=%d, charset_type_error=%d, package_error=%d, print_not_readable=%d, parse_error=%d, stream_error=%d, end_of_file=%d, reader_error=%d, file_error=%d, os_error=%d, storage_condition=%d, interrupt_condition=%d, warning=%d } condition_t;\n",condition, serious_condition, error_condition, program_error, source_program_error, control_error, arithmetic_error, division_by_zero, floating_point_overflow, floating_point_underflow, cell_error, unbound_variable, undefined_function, unbound_slot, type_error, keyword_error, charset_type_error, package_error, print_not_readable, parse_error, stream_error, end_of_file, reader_error, file_error, os_error, storage_condition, interrupt_condition, warning);
 
@@ -14363,14 +14350,14 @@ extern maygc void check_value (condition_t errortype, const char * errorstring);
    At every tilde-S, a LISP-object is taken from the STACK and printed
    instead of the tilde-S.
  > on the STACK: list of alternatives
-   ((restart-name restart-help-string . value-returned-by-the-restart)*), then
-   the initial values for the Condition, depending on error-type
+   ((restart-name restart-help-string . value-returned-by-the-restart)*),
+   then the initial values for the Condition, depending on error-type
  < value1: return value from CORRECTABLE-ERROR, one of the CDDRs of the
    alternatives
  < STACK: cleaned up
  can trigger GC */
 extern maygc void correctable_error (condition_t errortype, const char* errorstring);
-/* use by PACKAGE */
+/* use by PACKAGE, new-clx */
 
 /* Just like OS_error, but signal a FILE-ERROR.
  OS_file_error(pathname);
@@ -14745,6 +14732,15 @@ extern maygc object check_encoding (object obj, const gcv_object_t* e_default,
                                     bool keyword_p);
 /* used by ENCODING, FOREIGN */
 
+/* Signal an Error on illegal argument
+ > arg: bad object
+ > typ: expected type (may be nullobj to signal a regular error
+        instead of a type-error)
+ > key: the argument name (usually a keyword) */
+nonreturning_function(global, error_illegal_arg,
+                      (object arg, object typ, object key));
+/* used by ENCODING, PATHNAME, STREAM */
+
 /* Error when the property list has odd length
  error_plist_odd(caller,plist);
  > plist: bad plist */
@@ -14829,6 +14825,16 @@ nonreturning_function(extern, error_too_few_args,
                       (object caller, object func, uintL ngiven, uintL nmin));
 
 /* used by EVAL, FOREIGN */
+
+/* error-message, if a symbol has no value.
+ > symbol_: unbound symbol
+ > restart_p: false if nonreturning
+ < value1: bound value
+ < value2: T if STORE-VALUE was selected, NIL otherwise
+ can trigger GC */
+extern maygc void check_variable_value_replacement (gcv_object_t *symbol_,
+                                                    bool restart_p);
+/* used by EVAL, CONTROL */
 
 /* Error message, if an argument isn't of a given elementary C type.
  error_<ctype>(obj);
@@ -15123,18 +15129,6 @@ extern maygc bool namestring_correctly_parseable_p (gcv_object_t *path_);
  can trigger GC */
 extern maygc object physical_namestring (object thing);
 %% puts("extern object physical_namestring (object obj);");
-
-/* UP: Gives the directory-namestring in OS-format of a halfway checked
-     pathname assuming that the directory of the pathname exists.
- assume_dir_exists()
- > STACK_0: absolute pathname, halfway checked
- < STACK_0: (poss. the same) pathname, better resolved
- < result:
-     if Name=NIL: Directory-Namestring (for the OS)
-     if Name/=NIL: Namestring (for the OS, with nullbyte at the end)
- can trigger GC */
-extern maygc object assume_dir_exists (void);
-/* is used by STREAM */
 
 /* Converts a directory pathname to an OS directory specification.
  > pathname: an object
@@ -16085,9 +16079,7 @@ extern maygc object L_to_I (sint32 val);
  can trigger GC */
 #if (intLsize<=oint_data_len)
   #ifdef DEBUG_GCSAFETY
-    static inline maygc object UL_to_I (uintL val) {
-      return fixnum(val);
-    }
+    static inline maygc object UL_to_I (uintL val) { return fixnum(val); }
   #else
     #define UL_to_I(val)  fixnum((uintL)(val))
   #endif
@@ -16096,7 +16088,11 @@ extern maygc object L_to_I (sint32 val);
 #endif
 /* is used by MISC, TIME, STREAM, PATHNAME, HASHTABL, SPVW, ARRAY */
 %% #if (intLsize<=oint_data_len)
-%%   export_def(UL_to_I(val));
+%%   #ifdef DEBUG_GCSAFETY
+%%    puts("static inline object UL_to_I (uintL val) { return fixnum(val); }");
+%%   #else
+%%     export_def(UL_to_I(val));
+%%   #endif
 %% #else
 %%   puts("extern object UL_to_I (uintL val);");
 %% #endif
@@ -16640,6 +16636,7 @@ extern maygc object decimal_string (object x);
 
 #ifdef DYNAMIC_FFI
 %% #ifdef DYNAMIC_FFI
+%%  puts("#define HAVE_FFI");
 
 /* Return the pointer encoded by a Foreign-Pointer. */
   #define Fpointer_value(obj) TheFpointer(obj)->fp_pointer
@@ -16737,57 +16734,34 @@ extern void convert_to_foreign (object fvd, object obj, void* data, converter_ma
 /* ######################## THREADBIBL for THREAD.D ######################## */
 
 #ifdef MULTITHREAD
-
+%% #ifdef MULTITHREAD
 /* Structure containing all the per-thread global variables.
  (We could use a single instance of this structure also in the single-thread
  model, but it would make debugging less straightforward.) */
   typedef struct {
-    /* Most often used: */
-      #if !defined(STACK_register)
-        gcv_object_t* _STACK;
-      #endif
-      #if !defined(mv_count_register)
-        uintC _mv_count;
-      #endif
-      #if !defined(value1_register)
-        object _value1;
-      #endif
-      #if !defined(back_trace_register)
-        p_backtrace_t _back_trace;
-      #endif
-    /* Less often used: */
+    /* Most often used (also used by modules - so should be exported) : */
+      gcv_object_t* _STACK;
+      uintC _mv_count;
+      p_backtrace_t _back_trace;
+    /* VTZ:TODO this belongs to the end of the structure, but since i am lazy and just wanted
+       to compile the system I put it here. Otherwise quite bigger exported definiton (for modules) is required */
+      object _mv_space [mv_limit-1]; 
+
       #ifndef NO_SP_CHECK
         void* _SP_bound;
       #endif
+    /* VTZ: moved here from spvw.d. */
+      void* _SP_anchor;
+
       void* _STACK_bound;
+      void* _STACK_start;
       unwind_protect_caller_t _unwind_protect_to_save;
-      #ifdef NEED_temp_mv_count
-        uintC _temp_mv_count;
-      #endif
-      #ifdef NEED_temp_value1
-        object _temp_value1;
-      #endif
-      #ifdef HAVE_SAVED_STACK
-        gcv_object_t* _saved_STACK;
-      #endif
-      #ifdef HAVE_SAVED_mv_count
-        uintC _saved_mv_count;
-      #endif
-      #ifdef HAVE_SAVED_value1
-        object _saved_value1;
-      #endif
-      #ifdef HAVE_SAVED_back_trace
-        p_backtrace_t _saved_back_trace;
-      #endif
-      #if defined(HAVE_SAVED_REGISTERS)
-        struct registers * _callback_saved_registers;
-      #endif
+
       uintC _index; /* this thread's index in allthreads[] */
     /* Used for exception handling only: */
       handler_args_t _handler_args;
       stack_range_t* _inactive_handlers;
     /* Big, rarely used arrays come last: */
-      object _mv_space [mv_limit-1];
     /* Now the lisp objects (seen by the GC). */
       /* The Lisp object representing this thread: */
       object _lthread;
@@ -16796,56 +16770,115 @@ extern void convert_to_foreign (object fvd, object obj, void* data, converter_ma
       /* The values of per-thread symbols: */
       object _symvalues[unspecified];
   } clisp_thread_t;
+
+  /*VTZ: was based one the mmap_pagesize*/
+  #define THREAD_SYMVALUES_ALLOCATION_SIZE 4096
+
+  /* VTZ: have excluded the _lthread from the thread_object_offset and thread_object_count 
+   I am not sure but seems that garbage collector does not process it nicely. 
+   TODO: should it be included ???*/
   #define thread_size(nsymvalues)  \
     (offsetofa(clisp_thread_t,_symvalues)+nsymvalues*sizeof(gcv_object_t))
   #define thread_objects_offset(nsymvalues)  \
-    (offsetof(clisp_thread_t,_lthread))
+    (offsetof(clisp_thread_t,_aktenv))
   #define thread_objects_count(nsymvalues)  \
-    ((offsetofa(clisp_thread_t,_symvalues)-offsetof(clisp_thread_t,_lthread))/sizeof(gcv_object_t)+(nsymvalues))
+    ((offsetofa(clisp_thread_t,_symvalues)-offsetof(clisp_thread_t,_aktenv))/sizeof(gcv_object_t)+(nsymvalues))
 
-/* Size of a single thread's stack region. Must be a power of 2. */
-  #define THREAD_SP_SHIFT  22  /* 4 MB should be sufficient, and leaves room */
-                               /* for about 128 threads. */
-  #define THREAD_SP_SIZE  bit(THREAD_SP_SHIFT)
-/* Returns the stack pointer, or some address near the stack pointer. */
-  /* Important for efficiency: Multiple calls to this function within a single
-   function must be combined to a single, inlined call. To reach this, we
-   use __asm__, not __asm__ __volatile__, and we don't use a global register
-   variable. */
-  #if defined(ASM_get_SP_register)
-    #define roughly_SP()  \
-      ({ var aint __SP; __asm__ ASM_get_SP_register(__SP); __SP; })
-  #else
-    #define roughly_SP()  (aint)__builtin_frame_address(0)
-    /* Note: If (__GNUC__ == 2) && (__GNUC_MINOR__ >= 8) && (__GNUC_MINOR__ < 95)
-     one can write
-       #define roughly_SP()  (aint)__builtin_sp()
-     but this isn't efficient because gcc somehow knows that the stack pointer
-     varies across the function (maybe because of our register declaration?). */
-  #endif
-/* Returns a pointer to the thread structure, given the thread's stack pointer. */
-  #ifdef SP_DOWN
-    #ifndef MORRIS_GC
-      #define sp_to_thread(sp)  \
-        (clisp_thread_t*)((aint)(sp) & minus_bit(THREAD_SP_SHIFT))
-    #else
-      /* Morris GC doesn't like the backpointers to have garcol_bit set. */
-      #define sp_to_thread(sp)  \
-        (clisp_thread_t*)((aint)(sp) & (minus_bit(THREAD_SP_SHIFT) & ~wbit(garcol_bit_o)))
+/* VTZ: just the beginning of the structure is exported - what modules want to know about 
+   (in order to build) */
+%%  puts("typedef struct {");
+%%  puts("     gcv_object_t* _STACK;");
+%%  puts("     uintC _mv_count;");
+%%  puts("     p_backtrace_t _back_trace;");
+%%  puts("     object _mv_space [unspecified];");
+%%  puts("} clisp_thread_t;");
+  
+  #if defined(__GNUC__)
+    #if defined (UNIX_LINUX) /* || defined() - add more - the GCC should have built-in support for TLS */
+      #define per_thread __thread
     #endif
+  #elif defined(__WIN32__) && defined (MICROSOFT)
+    #define  per_thread __declspec(thread)
   #endif
-  #ifdef SP_UP
-    #define sp_to_thread(sp)  \
-      (clisp_thread_t*)(((aint)(sp) | (bit(THREAD_SP_SHIFT)-1)) - 0x1FFFF)
+  #ifdef per_thread
+     extern per_thread clisp_thread_t* _current_thread; /* current_thread pointer */
+     #define current_thread() _current_thread
+  #else
+    /* VTZ: We want MT, but our compiler does not provide built in support for MT. 
+      So use explicit TLS functions for this - xthread_get_key()
+    */
+    extern xthread_key_t current_thread_tls_key;
+    #define current_thread() ({clisp_thread_t *__thr=(clisp_thread_t *)xthread_key_get(current_thread_tls_key); __thr;})
   #endif
-/* Returns a pointer to the current thread structure. */
-  typedef clisp_thread_t* current_thread_function_t (void);
-  local inline const current_thread_function_t current_thread;
-  local inline clisp_thread_t* current_thread (void)
-  { return sp_to_thread(roughly_SP()); }
 
+#ifdef per_thread
+  #define set_current_thread(thread) _current_thread=thread
+#else
+  #define set_current_thread(thread) xthread_key_set(current_thread_tls_key,(void *)thread);
 #endif
 
+%% #ifdef per_thread
+%%   export_def(per_thread);
+%%   puts("extern per_thread clisp_thread_t* _current_thread;");
+%% #else
+%%   #if defined(POSIX_THREADS) || defined(POSIXOLD_THREADS)
+%%      emit_typedef ("pthread_key_t","xthread_key_t");
+%%   #endif
+%%   #if defined(SOLARIS_THREADS)
+%%      emit_typedef ("thread_key_t","xthread_key_t");
+%%   #endif
+%%   #if defined(WIN32_THREADS)
+%%      emit_typedef ("DWORD","xthread_key_t");
+%%   #endif
+%%   #if defined(C_THREADS)
+%%      #error "C_THREADS do not have TLS"
+%%   #endif
+%%   puts("extern xthread_key_t current_thread_tls_key;");
+%% #endif
+
+  #if 0 /* VTZ: not anymore ??? */
+    #if !(defined(HAVE_MMAP_ANON) || defined(HAVE_MMAP_DEVZERO) || defined(HAVE_MACH_VM) || defined(HAVE_WIN32_VM))
+      #error Multithreading requires memory mapping facilities!
+    #endif
+  #endif
+
+  #define inactive_handlers current_thread()->_inactive_handlers
+  #define handler_args current_thread()->_handler_args
+  #define unwind_protect_to_save current_thread()->_unwind_protect_to_save
+  #define aktenv current_thread()->_aktenv
+  #define STACK_bound current_thread()->_STACK_bound
+  #define STACK_start current_thread()->_STACK_start
+  #define mv_space current_thread()->_mv_space
+
+  #define STACK current_thread()->_STACK
+  #define mv_count current_thread()->_mv_count
+  #define back_trace current_thread()->_back_trace
+  #define SP_bound current_thread()->_SP_bound
+
+  #define SP_anchor current_thread()->_SP_anchor
+
+/* needed for building modules */
+%% export_def(value1);
+%% export_def(value2);
+%% export_def(value3);
+%% export_def(value4);
+%% export_def(value5);
+%% export_def(value6);
+%% export_def(value7);
+%% export_def(value8);
+%% export_def(value9);
+%% export_def(mv_count);
+%% export_def(back_trace);
+ 
+/* The lisp_stack_size should be speicified - if 0 - no allocation will be performed for it (for main thread). */
+extern clisp_thread_t* create_thread(uintM lisp_stack_size);
+/* removes the current_thread from the list (array) of threads. Also unmaps allocated memory by create_thread() */
+extern void delete_thread ();
+/* currently not used but when we start to play with symbols will be required in many files. */
+extern uintL maxnum_symvalues; /* initialized in spvw.d */
+
+#endif
+%% #endif
 /* ######################## BUILTBIBL for BUILT.D ######################## */
 
 /* Returns a multiline string containing some info about the flags with which
@@ -16861,7 +16894,11 @@ extern void sigsegv_handler_failed (void* address);
 
 /* For debugging: From within gdb, type: call ext_show_stack().
    Equivalent to (ext:show-stack) from the Lisp prompt. */
-extern void ext_show_stack (void);
+extern void gdb_show_stack (void);
+
+/* Fore debugging: From within gdb, type: call gdb_disassemble_closure(obj).
+   Equivalent to (sys::disassemble-closures (list obj) *standard-output*). */
+extern void gdb_disassemble_closure (object obj);
 
 /*************************************************************************/
 
