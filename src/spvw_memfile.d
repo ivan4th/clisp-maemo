@@ -381,7 +381,7 @@ global maygc off_t savemem (object stream, bool exec_p)
     });
   }
   /* execute one GC first: */
-  gar_col();
+  PERFORM_GC(gar_col(1));
   if (exec_p) savemem_with_runtime(handle);
   /* write basic information: */
   var memdump_header_t header;
@@ -681,9 +681,7 @@ local var offset_pages_t *offset_pages;
 #endif
 #if !defined(SINGLEMAP_MEMORY)
 local var oint offset_symbols_o;
-#if !defined(MULTIMAP_MEMORY_SYMBOL_TAB)
 local var oint old_symbol_tab_o;
-#endif
 #endif
 typedef struct { oint low_o; oint high_o; oint offset_o; } offset_subrs_t;
 local var offset_subrs_t* offset_subrs;
@@ -712,19 +710,11 @@ local void loadmem_update (gcv_object_t* objptr)
     #ifdef TYPECODES
     case_symbol: /* symbol */
      #ifndef SPVW_PURE_BLOCKS
-      #if !defined(MULTIMAP_MEMORY_SYMBOL_TAB)
       if (as_oint(*objptr) - old_symbol_tab_o
           < ((oint)sizeof(symbol_tab)<<(oint_addr_shift-addr_shift))) {
         /* symbol from symbol_tab */
         *objptr = as_object(as_oint(*objptr) + offset_symbols_o); break;
       }
-      #else
-      if (as_oint(*objptr) - (oint)(&symbol_tab)
-          < (sizeof(symbol_tab)<<(oint_addr_shift-addr_shift))) {
-        /* symbol from symbol_tab experiences no displacement */
-        break;
-      }
-      #endif
       /* other symbols are objects of variable length. */
      #endif
     #endif
@@ -761,12 +751,12 @@ local void loadmem_update (gcv_object_t* objptr)
     #endif
       /* object of variable length */
      #ifdef SPVW_MIXED_BLOCKS
-      *objptr = as_object(as_oint(*objptr) + offset_varobjects_o); break;
+      { *objptr = as_object(as_oint(*objptr) + offset_varobjects_o); break; }
      #endif
     case_pair:
       /* Two-Pointer-Object */
      #ifdef SPVW_MIXED_BLOCKS
-      *objptr = as_object(as_oint(*objptr) + offset_conses_o); break;
+      { *objptr = as_object(as_oint(*objptr) + offset_conses_o); break; }
      #endif
      #ifdef SPVW_PAGES
       {
@@ -809,9 +799,9 @@ local void loadmem_update (gcv_object_t* objptr)
           }
           ptr++;
         });
+        /* SUBR not found -> #<UNBOUND> */
+        *objptr = unbound;
       }
-      /* SUBR not found -> #<UNBOUND> */
-      *objptr = unbound;
    #endif
     found_subr:
       break;
@@ -899,7 +889,7 @@ local Handle open_filename (const char* filename)
                GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
                NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
  #else
-  #error "missing open_filename()"
+  #error missing open_filename()
  #endif
 }
 local void loadmem (const char* filename)
@@ -909,7 +899,7 @@ local void loadmem (const char* filename)
 #elif defined(WIN32_NATIVE)
  #define INVALID_HANDLE_P(handle)  (handle == INVALID_HANDLE)
 #else
- #error "missing INVALID_HANDLE_P()"
+ #error missing INVALID_HANDLE_P()
 #endif
   var Handle handle;
   begin_system_call();
@@ -1120,15 +1110,11 @@ local void loadmem_from_handle (Handle handle, const char* filename)
     if ((aint)(&symbol_tab) != header._symbol_tab_addr) ABORT_INI;
    #else
     offset_symbols_o = ((oint)(aint)(&symbol_tab) - (oint)header._symbol_tab_addr) << (oint_addr_shift-addr_shift);
-    #ifdef MULTIMAP_MEMORY_SYMBOL_TAB
-    if (offset_symbols_o != 0) ABORT_INI;
-    #else
-     #ifdef TYPECODES
+    #ifdef TYPECODES
     old_symbol_tab_o = as_oint(type_pointer_object(symbol_type,header._symbol_tab_addr));
-     #else
+    #else
     old_symbol_tab_o = (oint)header._symbol_tab_addr;
-     #endif  /* TYPECODES */
-    #endif  /* MULTIMAP_MEMORY_SYMBOL_TAB */
+    #endif  /* TYPECODES */
    #endif  /* SPVW_PURE_BLOCKS */
     /* initialize offset-of-SUBRs-table: */
     offset_subrs_count = 1+header._module_count;
@@ -1637,7 +1623,7 @@ local void loadmem_from_handle (Handle handle, const char* filename)
        #endif  /* SPVW_MIXED_BLOCKS_OPPOSITE */
        #ifdef SPVW_PURE_BLOCKS
         /* Don't need to rebuild the cache. */
-        xmmprotect_old_generation_cache(heapnr);
+        xmprotect_old_generation_cache(heapnr);
        #else
         if (!is_unused_heap(heapnr))
           build_old_generation_cache(heapnr);
@@ -1684,22 +1670,23 @@ local void loadmem_from_handle (Handle handle, const char* filename)
         ABORT_MEM;
     }
   }
-  /* Delete cache of standard file streams. */
-  O(standard_input_file_stream) = NIL;
-  O(standard_output_file_stream) = NIL;
-  O(standard_error_file_stream) = NIL;
- #ifdef MACHINE_KNOWN
-  /* declare (MACHINE-TYPE), (MACHINE-VERSION), (MACHINE-INSTANCE)
-     as unknown again: */
-  O(machine_type_string) = NIL;
-  O(machine_version_string) = NIL;
-  O(machine_instance_string) = NIL;
- #endif
- #ifndef LANGUAGE_STATIC
-  /* delete cache of (LISP-IMPLEMENTATION-VERSION)
-     (depends on (SYS::CURRENT-LANGUAGE) ): */
-  O(lisp_implementation_version_string) = NIL;
- #endif
+  { /* Delete cache of standard file streams. */
+    O(standard_input_file_stream) = NIL;
+    O(standard_output_file_stream) = NIL;
+    O(standard_error_file_stream) = NIL;
+   #ifdef MACHINE_KNOWN
+    /* declare (MACHINE-TYPE), (MACHINE-VERSION), (MACHINE-INSTANCE)
+       as unknown again: */
+    O(machine_type_string) = NIL;
+    O(machine_version_string) = NIL;
+    O(machine_instance_string) = NIL;
+   #endif
+   #ifndef LANGUAGE_STATIC
+    /* delete cache of (LISP-IMPLEMENTATION-VERSION)
+       (depends on (SYS::CURRENT-LANGUAGE) ): */
+    O(lisp_implementation_version_string) = NIL;
+   #endif
+  }
   CHECK_AVL_CONSISTENCY();
   CHECK_GC_CONSISTENCY();
   CHECK_GC_UNMARKED(); CHECK_NULLOBJ(); CHECK_GC_CACHE(); CHECK_GC_GENERATIONAL(); SAVE_GC_DATA();
@@ -1718,9 +1705,9 @@ local void loadmem_from_handle (Handle handle, const char* filename)
     char memdumptime[10+1];
     sprintf(memdumptime,"%u",header._dumptime);
     O(memory_image_timestamp) = ascii_to_string(memdumptime);
+    O(memory_image_host) = asciz_to_string(header._dumphost,
+                                           Symbol_value(S(utf_8)));
   }
-  O(memory_image_host) = asciz_to_string(header._dumphost,
-                                         Symbol_value(S(utf_8)));
   return;
 #undef ABORT_SYS
 #undef ABORT_INI
