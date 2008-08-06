@@ -117,7 +117,7 @@ local uintP mlb_expand (mlbitmap* bitmap, uintL newsize)
   if (newsize < 2*bitmap->alloc_size)
     newsize = 2*bitmap->alloc_size;
   begin_system_call();
-  var char* newbase = (bitmap->base==NULL ? malloc(newsize) : realloc((char*)bitmap->base,newsize));
+  var char* newbase = (char *) (bitmap->base==NULL ? malloc(newsize) : realloc((char*)bitmap->base,newsize));
   end_system_call();
   if (newbase==NULL)
     longjmp(bitmap->oom_context,true);
@@ -983,7 +983,7 @@ local void get_circ_mark (object obj, get_circ_global* env)
       if (STACK_overflow())  /* check STACK-depth */
         longjmp(env->abort_context,true); /* abort */
       /* store object with deleted garcol_bit in STACK: */
-      pushSTACK(without_mark_bit(obj));
+      { pushSTACK(without_mark_bit(obj)); }
       env->counter++;           /* and count */
       goto m_end;
     #ifdef TYPECODES
