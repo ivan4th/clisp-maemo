@@ -1,7 +1,7 @@
 /*
  * Streams for CLISP
- * Bruno Haible 1990-2005
- * Sam Steingold 1998-2007
+ * Bruno Haible 1990-2008
+ * Sam Steingold 1998-2008
  * Generic Streams: Marcus Daniels 8.4.1994
  * SCREEN package for Win32: Arseny Slobodjuck 2001-02-14
  * German comments translated into English: Stefan Kain 2001-11-02
@@ -14,9 +14,7 @@
   #include <readline/readline.h>
   #include <readline/history.h>
 #endif
-#ifdef STDC_HEADERS
-  #include <string.h>           /* declares strcpy(), strcat() */
-#endif
+#include <string.h>           /* declares strcpy(), strcat() */
 
 /* off_t is a signed type, defined in <sys/types.h> and <fcntl.h>, denoting
  a file descriptor's position. Here we also need the unsigned equivalent. */
@@ -1788,7 +1786,7 @@ local maygc object rd_by_concat (object stream) {
              Cdr(TheStream(stream)->strm_concat_list);
   }
   /* all Streams emptied -> return EOF: */
-  result = eof_value;
+  { result = eof_value; }
  OK:
   skipSTACK(1);
   return result;
@@ -3293,9 +3291,7 @@ local signean test_buffered_arg (object arg) {
     return -1;
   if (eq(arg,T))
     return 1;
-  pushSTACK(arg); pushSTACK(S(Kbuffered));
-  pushSTACK(TheSubr(subr_self)->name);
-  error(error_condition,GETTEXT("~S: illegal ~S argument ~S"));
+  error_illegal_arg(arg,O(type_buffered_arg),S(Kbuffered));
 }
 
 /* Classification of possible :ELEMENT-TYPEs. */
@@ -3360,17 +3356,18 @@ local maygc void test_eltype_arg (gcv_object_t* eltype_, decoded_el_t* decoded)
       goto eltype_integer;
     }
   }
-  /* First of all canonicalize a little bit (therewith the different
-   SUBTYPEP will not have to do the same three times): */
-  pushSTACK(arg); funcall(S(canonicalize_type),1); /* (SYS::CANONICALIZE-TYPE arg) */
-  pushSTACK(value1); /* save canon-arg */
-  pushSTACK(STACK_0); pushSTACK(S(character)); funcall(S(subtypep),2); /* (SUBTYPEP canon-arg 'CHARACTER) */
-  if (!nullp(value1)) {
-    skipSTACK(1);
-    decoded->kind = eltype_ch; decoded->size = 0;
-    return;
+  { /* First of all canonicalize a little bit (therewith the different
+       SUBTYPEP will not have to do the same three times): */
+    pushSTACK(arg); funcall(S(canonicalize_type),1); /* (SYS::CANONICALIZE-TYPE arg) */
+    pushSTACK(value1); /* save canon-arg */
+    pushSTACK(STACK_0); pushSTACK(S(character)); funcall(S(subtypep),2); /* (SUBTYPEP canon-arg 'CHARACTER) */
+    if (!nullp(value1)) {
+      skipSTACK(1);
+      decoded->kind = eltype_ch; decoded->size = 0;
+      return;
+    }
+    funcall(S(subtype_integer),1); /* (SYS::SUBTYPE-INTEGER canon-arg) */
   }
-  funcall(S(subtype_integer),1); /* (SYS::SUBTYPE-INTEGER canon-arg) */
   if (!((mv_count>1) && integerp(value1) && integerp(value2)))
     goto bad_eltype;
   {
@@ -3400,9 +3397,7 @@ local maygc void test_eltype_arg (gcv_object_t* eltype_, decoded_el_t* decoded)
   decoded->size = posfixnum_to_V(eltype_size);
   return;
  bad_eltype:
-  pushSTACK(*eltype_); pushSTACK(S(Kelement_type));
-  pushSTACK(TheSubr(subr_self)->name);
-  error(error_condition,GETTEXT("~S: illegal ~S argument ~S"));
+  error_illegal_arg(*eltype_,nullobj,S(Kelement_type));
 }
 
 /* evaluate the appropriate forms */
@@ -3648,27 +3643,72 @@ local void clear_tty_output (Handle handle) {
   end_system_call();
 }
 
+
 #endif
+
+/* UP: Return platform-specific file type
+ handle_type(handle)
+ > handle: open handle (file or pipe)
+ < result: an integer, identifying the type */
+ #if defined(UNIX)
+#define handle_type_t mode_t
+local handle_type_t handle_type (Handle handle) {
+  var struct stat statbuf;
+  begin_system_call();
+  if (!( fstat(handle,&statbuf) ==0)) { OS_error(); }
+  end_system_call();
+  return statbuf.st_mode;
+}
+#elif defined(WIN32_NATIVE)
+#define handle_type_t DWORD
+local handle_type_t handle_type (Handle handle) {
+  var DWORD filetype;
+  begin_system_call();
+  filetype = GetFileType(handle);
+  end_system_call();
+  return filetype;
+}
+#else
+#error handle_type() and handle_type_t are not defined
+ #endif
 
 /* UP: Determines, if a Handle refers to a (static) File.
  regular_handle_p(handle)
  > handle: Handle of the opened File
  < result: true if it is a (static) File */
-local bool regular_handle_p (Handle handle) {
+local inline bool regular_handle_type_p (handle_type_t mode) {
  #if defined(UNIX)
-  var struct stat statbuf;
-  begin_system_call();
-  if (!( fstat(handle,&statbuf) ==0)) { OS_error(); }
-  end_system_call();
-  return (S_ISREG(statbuf.st_mode) || S_ISBLK(statbuf.st_mode));
+  return S_ISREG(mode) || S_ISBLK(mode);
+ #elif defined(WIN32_NATIVE)
+  return mode == FILE_TYPE_DISK;
  #endif
- #ifdef WIN32_NATIVE
-  var DWORD filetype;
-  begin_system_call();
-  filetype = GetFileType(handle);
-  end_system_call();
-  return (filetype == FILE_TYPE_DISK);
+}
+#define regular_handle_p(h)  regular_handle_type_p(handle_type(h))
+
+/* UP: Determines, if a Handle refers to a pipe or a socket
+ pipe_handle_p(handle)
+ > handle: Handle of the opened File
+ < result: true if it is a socket or a pipe */
+local inline bool pipe_handle_type_p (handle_type_t mode) {
+ #if defined(UNIX)
+  return S_ISFIFO(mode)
+   #if defined(S_ISSOCK)
+    || S_ISSOCK(mode)
+   #endif
+    ;
+ #elif defined(WIN32_NATIVE)
+  return mode == FILE_TYPE_PIPE;
  #endif
+}
+#define pipe_handle_p(h)  pipe_handle_type_p(handle_type(h))
+
+/* UP: Determines, if a Handle refers to a pipe, socket, file
+ pipe_handle_p(handle)
+ > handle: Handle of the opened File
+ < result: true if it is a socket/pipe/file */
+local inline bool pipe_file_handle_p (Handle handle) {
+  handle_type_t mode = handle_type(handle);
+  return regular_handle_type_p(mode) || pipe_handle_type_p(mode);
 }
 
 /* UP: Determines if two Handle refer to the same file or device.
@@ -4718,7 +4758,7 @@ local inline uintB* UnbufferedStream_pop_all (object stream,
   return byteptr;
 }
 
-local sintL low_read_unbuffered_handle (object stream) {
+local maygc sintL low_read_unbuffered_handle (object stream) {
   if (UnbufferedStream_status(stream) < 0) { /* already EOF? */
     return -1;
   }
@@ -4727,12 +4767,14 @@ local sintL low_read_unbuffered_handle (object stream) {
   }
   var Handle handle = TheHandle(TheStream(stream)->strm_ichannel);
   var uintB b;
- restart_it:
+  pushSTACK(stream);
+  /*restart_it:*/
   run_time_stop(); /* hold run time clock */
-  begin_system_call();
+  begin_blocking_system_call();
   var ssize_t result = full_read(handle,&b,1); /* try to read a byte */
-  end_system_call();
+  end_blocking_system_call();
   run_time_restart(); /* resume run time clock */
+  stream=popSTACK();
   if (result<0) {
     #ifdef WIN32_NATIVE
     begin_system_call();
@@ -5060,9 +5102,15 @@ local object rd_by_ias_unbuffered (object stream) {
 
 /* READ-BYTE - Pseudo-Function for Handle-Streams, Type au, bitsize = 8 : */
 local object rd_by_iau8_unbuffered (object stream) {
+ rd_by_iau8_unbuffered_retry:
   var sintL b = UnbufferedStreamLow_read(stream)(stream);
   if (b < 0)
     return eof_value;
+  if (b == LF && ChannelStream_ignore_next_LF(stream)) {
+    /* see comment in rd_by_array_iau8_unbuffered */
+    ChannelStream_ignore_next_LF(stream) = false;
+    goto rd_by_iau8_unbuffered_retry;
+  }
   return fixnum((uintB)b);
 }
 
@@ -5070,13 +5118,25 @@ local object rd_by_iau8_unbuffered (object stream) {
 local uintL rd_by_array_iau8_unbuffered (const gcv_object_t* stream_,
                                          const gcv_object_t* bytearray_,
                                          uintL start, uintL len,
-                                         perseverance_t persev)
-{
+                                         perseverance_t persev) {
+
   var object stream = *stream_;
   var uintB* startptr = &TheSbvector(*bytearray_)->data[start];
   var uintB* endptr =
     UnbufferedStreamLow_read_array(stream)(stream,startptr,len,persev);
-  return endptr-startptr;
+  if (startptr < endptr && *startptr == LF
+      && ChannelStream_ignore_next_LF(stream)) {
+    /* if we switch from character to byte input after a NL,
+       we need to drop the next CR
+       https://sourceforge.net/tracker/index.php?func=detail&aid=2022362&group_id=1355&atid=101355 */
+    var uintL len = endptr-startptr-1;
+    /* shift the whole array down by one, dropping CR */
+    var uintL count = len;
+    for (; count--; startptr++) startptr[0] = startptr[1];
+    ChannelStream_ignore_next_LF(stream) = false;
+    endptr = UnbufferedStreamLow_read_array(stream)(stream,startptr,1,persev);
+    return len + (endptr - startptr);
+  } else return endptr-startptr;
 }
 
 /* Determines, if  a Byte is available on an Unbuffered-Channel-Stream.
@@ -5093,24 +5153,25 @@ local signean listen_byte_ia8_unbuffered (object stream) {
    -----------------
 
  READ-CHAR - Pseudo-Function for Unbuffered-Channel-Streams: */
-local object rd_ch_unbuffered (const gcv_object_t* stream_) {
+local maygc object rd_ch_unbuffered (const gcv_object_t* stream_) {
   var object stream = *stream_;
   if (eq(TheStream(stream)->strm_rd_ch_last,eof_value)) /* already EOF? */
     return eof_value;
  retry: {
     var chart c;
    #ifdef UNICODE
-    var object encoding = TheStream(stream)->strm_encoding;
     var uintB buf[max_bytes_per_chart];
     var uintL buflen = 0;
     while (1) {
       var sintL b = UnbufferedStreamLow_read(stream)(stream);
       if (b < 0)
         return eof_value;
+      stream=*stream_;
       ASSERT(buflen < max_bytes_per_chart);
       buf[buflen++] = (uintB)b;
       var const uintB* bptr = &buf[0];
       var chart* cptr = &c;
+      var object encoding = TheStream(stream)->strm_encoding;
       Encoding_mbstowcs(encoding)
         (encoding,stream,&bptr,&buf[buflen],&cptr,cptr+1);
       if (cptr == &c) { /* Not a complete character. */
@@ -5132,6 +5193,7 @@ local object rd_ch_unbuffered (const gcv_object_t* stream_) {
       var sintL b = UnbufferedStreamLow_read(stream)(stream);
       if (b < 0)
         return eof_value;
+      stream=*stream_;
       c = as_chart((uintB)b);
     }
    #endif
@@ -6570,9 +6632,19 @@ local object rd_ch_buffered (const gcv_object_t* stream_) {
              ls_eof   if EOF is reached,
              ls_wait  if no character is available, but not because of EOF */
 local signean listen_char_buffered (object stream) {
-  uintB* buf = buffered_nextbyte(stream,persev_immediate);
+ listen_char_buffered_retry:
+  var uintB* buf = buffered_nextbyte(stream,persev_immediate);
   if (buf == (uintB*)NULL) return ls_eof; /* EOF */
   if (buf == (uintB*)-1)   return ls_wait; /* will hang */
+  if (*buf == '\n' && ChannelStream_ignore_next_LF(stream)) { /* discard LF */
+    /* assume that '\n' is LF in all encodings */
+    BufferedStream_index(stream) += 1;
+    BufferedStream_position(stream) += 1;
+    ChannelStream_ignore_next_LF(stream) = false;
+    goto listen_char_buffered_retry;
+    /* we might extract rd_ch_buffered_low from above instead,
+       but it seems too much work for little gain */
+  }
   /* In case of UNICODE, the presence of a byte does not guarantee the
    presence of a multi-byte character. Returning ls_avail here is
    therefore not correct. But this doesn't matter since programs seeing
@@ -7245,11 +7317,16 @@ local object rd_by_ics_buffered (object stream) {
 
 /* READ-BYTE - Pseudo-Function for File-Streams of Integers, Type au, bitsize = 8 : */
 local object rd_by_iau8_buffered (object stream) {
+ rd_by_iau8_buffered_retry:
   var uintB* ptr = buffered_nextbyte(stream,persev_partial);
   if (!(ptr == (uintB*)NULL)) {
-    var object obj = fixnum(*ptr);
-    /* increment index and position */
     BufferedStream_index(stream) += 1;
+    if (*ptr == LF && ChannelStream_ignore_next_LF(stream)) {
+      /* see comment in rd_by_array_iau8_unbuffered */
+      ChannelStream_ignore_next_LF(stream) = false;
+      goto rd_by_iau8_buffered_retry;
+    }
+    var object obj = fixnum(*ptr);
     BufferedStream_position(stream) += 1;
     return obj;
   } else {
@@ -7260,10 +7337,19 @@ local object rd_by_iau8_buffered (object stream) {
 /* READ-BYTE-SEQUENCE for File-Streams of Integers, Type au, bitsize = 8 : */
 local uintL rd_by_array_iau8_buffered (const gcv_object_t* stream_,
                                        const gcv_object_t* bytearray_,
-                                       uintL start, uintL len, perseverance_t persev) {
+                                       uintL start, uintL len,
+                                       perseverance_t persev) {
   var uintB* startptr = &TheSbvector(*bytearray_)->data[start];
   var uintB* endptr = read_byte_array_buffered(*stream_,startptr,len,persev);
   var uintL result = endptr-startptr;
+  if (result && *startptr == LF && ChannelStream_ignore_next_LF(*stream_)) {
+    /* see comment in rd_by_array_iau8_unbuffered */
+    var uintL count = --result;
+    for (; count--; startptr++) startptr[0] = startptr[1];
+    ChannelStream_ignore_next_LF(*stream_) = false;
+    endptr = read_byte_array_buffered(*stream_,startptr,1,persev);
+    result += endptr - startptr;  /* 0 or 1 */
+  }
   /* increment position: */
   BufferedStream_position(*stream_) += result;
   return result;
@@ -7964,35 +8050,6 @@ local maygc void finish_output_buffered (object stream) {
     }
     end_system_call();
     #endif
-   #else
-    if (!nullp(TheStream(stream)->strm_file_truename)) { /* avoid closing stdout_handle */
-    #if 0
-     /* close File (DOS writes physically): */
-      begin_system_call();
-      if ( CLOSE(TheHandle(BufferedStream_channel(stream))) <0) {
-        end_system_call(); OS_filestream_error(stream);
-      }
-      end_system_call();
-      /* reopen File: */
-      pushSTACK(stream); /* save stream */
-      pushSTACK(TheStream(stream)->strm_file_truename); /* Filename */
-      /* Directory alrady exists: */
-      var object namestring = assume_dir_exists(); /* Filename as ASCIZ-String */
-      var sintW handle;
-      with_sstring_0(namestring,O(pathname_encoding),namestring_asciz, {
-        begin_system_call();
-        handle = OPEN(namestring_asciz,O_RDWR); /* reopen file */
-        if (handle < 0) { end_system_call(); OS_filestream_error(STACK_1); }
-        end_system_call();
-      });
-      /* Now handle contains the Handle of the opened File. */
-      var object handlobj = allocate_handle(handle);
-      skipSTACK(1);
-      stream = popSTACK(); /* restore stream */
-      /* enter new Handle: */
-      BufferedStream_channel(stream) = handlobj;
-    #endif
-    }
    #endif
   }
   /* and reposition: */
@@ -9164,7 +9221,7 @@ local maygc char** lisp_completion (char* text, int start, int end) {
 #ifdef HAVE_TERMINAL1
 
 /* read a character from a terminal-stream. */
-local object rd_ch_terminal1 (const gcv_object_t* stream_) {
+local maygc object rd_ch_terminal1 (const gcv_object_t* stream_) {
   var object ch = rd_ch_unbuffered(stream_);
   /* If both stdin and stdout are the same Terminal,
    and we read a NL, we can assume, that afterwards
@@ -12376,7 +12433,7 @@ LISPFUNN(make_window,0) {
   begin_system_call();
   initscr(); /* initialize Curses - What, if this crashes?? use newterm()?? */
   cbreak(); noecho(); /* Input not line-buffered, without Echo */
- #if defined(SUN3) || defined(SUN4)
+ #ifdef SUN4
   keypad(stdscr,true); /* activate Function-Key-Detection */
  #endif
   end_system_call();
@@ -12387,7 +12444,7 @@ LISPFUNN(make_window,0) {
 local void close_window (object stream, uintB abort) {
   begin_system_call();
   nocbreak(); echo(); /* Input is line-buffered again, with Echo */
- #if defined(SUN3) || defined(SUN4)
+ #ifdef SUN4
   keypad(stdscr,false); /* deactivate Function-Key-Detection again */
  #endif
   endwin(); /* deactivate Curses */
@@ -13140,7 +13197,7 @@ LISPFUN(make_pipe_io_stream,seclass_default,1,0,norest,key,3,
   /* 3 values:
    (make-two-way-stream input-stream output-stream), input-stream, output-stream. */
   STACK_2 = make_twoway_stream(STACK_1,STACK_0);
-  funcall(L(values),3);
+  STACK_to_mv(3);
   skipSTACK(4);
 }
 
@@ -13815,7 +13872,8 @@ global maygc object sec_usec_number (uint32 sec, uint32 usec, bool abs_p)
 {
   pushSTACK(TO_INT((abs_p ? UNIX_LISP_TIME_DIFF : 0) + sec));
   if (usec) {
-    pushSTACK(TO_INT(usec)); pushSTACK(fixnum(1000000)); funcall(L(star),2);
+    /* this is likely to end up as a ratio... */
+    pushSTACK(TO_INT(usec)); pushSTACK(fixnum(1000000)); funcall(L(slash),2);
     pushSTACK(value1); funcall(L(plus),2);
     return value1;
   } else
@@ -13929,7 +13987,7 @@ LISPFUN(socket_connect,seclass_default,1,1,norest,key,4,
 
   var char *hostname;
   if (missingp(STACK_3))
-    hostname = "localhost";
+    hostname = (char*)"localhost";
   else
     hostname = TheAsciz(string_to_asciz(check_string(STACK_3),
                                         O(misc_encoding)));
@@ -14581,7 +14639,7 @@ LISPFUNN(socket_stream_shutdown,2) {
   if (shutdown(handle,shutdown_how))
     { SOCK_error(); }
   end_system_call();
-  value1 = NIL;
+  { value1 = NIL; }
  done:
   skipSTACK(1);
   mv_count = 1;
@@ -14759,16 +14817,14 @@ local maygc object make_terminal_io (void) {
   /* If stdin or stdout is a file, use a buffered stream instead of an
    unbuffered terminal stream. For the ud2cd program used as filter,
    this reduces the runtime on Solaris from 165 sec to 47 sec. */
-  var bool stdin_file = regular_handle_p(stdin_handle);
-  var bool stdout_file = regular_handle_p(stdout_handle);
+  var bool stdin_file = pipe_file_handle_p(stdin_handle);
+  var bool stdout_file = pipe_file_handle_p(stdout_handle);
   if (stdin_file || stdout_file) {
-    /* Input side: */
-    var object istream =
-      (stdin_file ? get_standard_input_file_stream() : make_terminal_stream());
+    var object istream = stdin_file ? /* Input side */
+      get_standard_input_file_stream() : make_terminal_stream();
     pushSTACK(istream);
-    /* Output side: */
-    var object ostream =
-      (stdout_file ? get_standard_output_file_stream() : make_terminal_stream());
+    var object ostream = stdout_file ? /* Output side */
+      get_standard_output_file_stream() : make_terminal_stream();
     /* Build a two-way-stream: */
     return make_twoway_stream(popSTACK(),ostream);
   }
@@ -14885,11 +14941,14 @@ global maygc void init_streamvars (bool batch_p) {
     define_variable(S(debug_io),stream);         /* *DEBUG-IO* */
     define_variable(S(trace_output),stream);     /* *TRACE-OUTPUT* */
     define_variable(S(standard_input),           /* *STANDARD-INPUT* */
-      batch_p ? get_standard_input_file_stream() : terminal_io_input_stream(stream));
+                    batch_p ? get_standard_input_file_stream()
+                    : terminal_io_input_stream(stream));
     define_variable(S(standard_output),          /* *STANDARD-OUTPUT* */
-      batch_p ? get_standard_output_file_stream() : terminal_io_output_stream(stream));
+                    batch_p ? get_standard_output_file_stream()
+                    : terminal_io_output_stream(stream));
     define_variable(S(error_output),             /* *ERROR-OUTPUT* */
-      batch_p ? get_standard_error_file_stream() : (object)Symbol_value(S(standard_output)));
+                    batch_p ? get_standard_error_file_stream()
+                    : (object)Symbol_value(S(standard_output)));
   }
   #ifdef KEYBOARD
   /* Initialize the *KEYBOARD-INPUT* stream. This can fail in some cases,
@@ -14939,10 +14998,11 @@ local void error_value_stream (object sym) {
     pushSTACK(S(stream));         /* TYPE-ERROR slot EXPECTED-TYPE */
     pushSTACK(Symbol_value(sym)); /* variable value */
     pushSTACK(sym); /* variable */
+    pushSTACK(TheSubr(subr_self)->name);
     if (!streamp(Symbol_value(sym))) {
-      error(type_error,GETTEXT("The value of ~S is not a stream: ~S"));
+      error(type_error,GETTEXT("~S: The value of ~S is not a stream: ~S"));
     } else {
-      error(type_error,GETTEXT("The value of ~S is not an appropriate stream: ~S"));
+      error(type_error,GETTEXT("~S: The value of ~S is not an appropriate stream: ~S"));
     }
   }
   sym = popSTACK();
@@ -14954,7 +15014,8 @@ local void error_value_stream (object sym) {
   pushSTACK(stream); /* new variable value */
   pushSTACK(oldvalue); /* old variable value */
   pushSTACK(sym); /* Variable */
-  error(type_error,GETTEXT("The value of ~S was not an appropriate stream: ~S. It has been changed to ~S."));
+  pushSTACK(TheSubr(subr_self)->name);
+  error(type_error,GETTEXT("~S: The value of ~S was not an appropriate stream: ~S. It has been changed to ~S."));
 }
 
 #ifdef GNU_READLINE
@@ -15079,22 +15140,21 @@ LISPFUNNR(built_in_stream_element_type,1) {
       } else eltype = T; /* empty stream list */
       break;
     /* first the stream-types with restricted element-types: */
-    case strmtype_str_out:      /* could be (VECTOR NIL) */
+    case strmtype_str_out: {    /* could be (VECTOR NIL) */
       eltype = (((Iarray_flags(TheStream(stream)->strm_str_out_string)
                   & arrayflags_atype_mask) == Atype_NIL)
                 ? NIL : S(character));
-      break;
+    } break;
     case strmtype_str_in:
     case strmtype_str_push:
     case strmtype_pphelp:
     case strmtype_buff_in:
     case strmtype_buff_out:
       /* CHARACTER */
-      eltype = S(character); break;
+      { eltype = S(character); } break;
    #ifdef KEYBOARD
     case strmtype_keyboard:
-      eltype = T;
-      break;
+      { eltype = T; } break;
    #endif
     case strmtype_terminal:
    #ifdef SCREEN
@@ -15104,7 +15164,7 @@ LISPFUNNR(built_in_stream_element_type,1) {
     case strmtype_printer:
    #endif
       /* CHARACTER */
-      eltype = S(character); break;
+      { eltype = S(character); } break;
     case strmtype_file:
    #ifdef PIPES
     case strmtype_pipe_in:
@@ -15169,10 +15229,9 @@ LISPFUNNR(built_in_stream_element_type,1) {
         *stream_list_ = Cdr(*stream_list_);
       }
       switch (count) {
-        case 0: eltype = T; skipSTACK(1); break; /* no streams */
-        case 1: eltype = STACK_0; skipSTACK(2); break;
-        default: eltype = combine_stream_element_types(count);
-          skipSTACK(1); break;
+        case 0: { eltype = T; skipSTACK(1); } break; /* no streams */
+        case 1: { eltype = STACK_0; skipSTACK(2); } break;
+        default: eltype = combine_stream_element_types(count); skipSTACK(1);
       }
     } break;
       /* then the general streams: */
@@ -15330,7 +15389,7 @@ LISPFUNN(built_in_stream_set_element_type,2) {
       }
       break;
    #ifdef SOCKET_STREAMS
-    case strmtype_twoway_socket:
+    case strmtype_twoway_socket: {
       /* Apply to the input and output side individually. */
       pushSTACK(TheStream(STACK_2)->strm_twoway_socket_input); /* stream */
       pushSTACK(STACK_(0+1));
@@ -15338,7 +15397,7 @@ LISPFUNN(built_in_stream_set_element_type,2) {
       pushSTACK(TheStream(STACK_2)->strm_twoway_socket_output); /* stream */
       pushSTACK(STACK_(0+1));
       funcall(L(built_in_stream_set_element_type),2);
-      break;
+    } break;
    #endif
     default:
       error_illegal_streamop(O(setf_stream_element_type),stream);
@@ -15797,24 +15856,26 @@ LISPFUN(built_in_stream_close,seclass_default,1,0,norest,key,1, (kw(abort)) ) {
  < buffer: contains the read characters, excluding the terminating #\Newline
  < result: true if EOF was seen before newline, else false
  can trigger GC */
-global maygc bool read_line (const gcv_object_t* stream_, const gcv_object_t* buffer_) {
+local inline maygc bool push_ch (object ch, object buffer) {
+  if (!charp(ch)) {
+    if (eq(subr_self,L(read_line))) error_char(ch);
+    else with_saved_back_trace_subr(L(read_line),STACK STACKop -4,-1,
+                                    error_char(ch));
+  }
+  if (eq(ch,ascii_char(NL)))
+    return false;
+  ssstring_push_extend(buffer,char_code(ch));
+  return true;
+}
+global maygc bool read_line (const gcv_object_t* stream_,
+                             const gcv_object_t* buffer_) {
   var object stream = *stream_;
   if (builtin_stream_p(stream)) {
     if (TheStream(stream)->strmflags & strmflags_unread_B) { /* Char after UNREAD ? */
       /* yes -> delete Flagbit and fetch last character: */
       TheStream(stream)->strmflags &= ~strmflags_unread_B;
-      var object ch = TheStream(stream)->strm_rd_ch_last;
-      if (!charp(ch)) {
-        if (eq(subr_self,L(read_line)))
-          error_char(ch);
-        else
-          with_saved_back_trace_subr(L(read_line),STACK STACKop -4,-1,
-            error_char(ch); );
-      }
-      if (eq(ch,ascii_char(NL)))
+      if (!push_ch(TheStream(stream)->strm_rd_ch_last,*buffer_))
         return false;
-      ssstring_push_extend(*buffer_,char_code(ch));
-      stream = *stream_;
     }
     var uintL oldfillptr = TheIarray(*buffer_)->dims[1];
     var bool eofp;
@@ -15823,33 +15884,21 @@ global maygc bool read_line (const gcv_object_t* stream_, const gcv_object_t* bu
         eofp = read_line_synonym(stream,buffer_);
         break;
       case strmtype_twoway:
-       #ifdef SOCKET_STREAMS
+     #ifdef SOCKET_STREAMS
       case strmtype_twoway_socket:
-      #endif
+     #endif
         eofp = read_line_twoway(stream,buffer_);
         break;
         /* No special-casing of strmtype_echo, because the echo-stream may
          be interactive, and delaying the echo in this case is undesirable. */
       default:
-        while (1) {
+        do {
           var object ch = rd_ch(*stream_)(stream_); /* read next character */
           if (eq(ch,eof_value)) { /* EOF ? */
             eofp = true; break;
           }
-          /* else check for Character: */
-          if (!charp(ch)) {
-            if (eq(subr_self,L(read_line)))
-              error_char(ch);
-            else
-              with_saved_back_trace_subr(L(read_line),STACK STACKop -4,-1,
-                error_char(ch); );
-          }
-          if (eq(ch,ascii_char(NL))) { /* NL -> End of Line */
-            eofp = false; break;
-          }
-          /* write other Character in the Buffer: */
-          ssstring_push_extend(*buffer_,char_code(ch));
-        }
+          eofp = push_ch(ch,*buffer_);
+        } while (eofp);
         break;
     }
     stream = *stream_;
@@ -16570,9 +16619,7 @@ local uintL check_float_eltype (gcv_object_t* eltype_) {
     if (is_dfloat_subtype)
       return sizeof(dfloatjanus);
   }
-  pushSTACK(*eltype_); pushSTACK(S(Kelement_type));
-  pushSTACK(TheSubr(subr_self)->name);
-  error(error_condition,GETTEXT("~S: illegal ~S argument ~S"));
+  error_illegal_arg(*eltype_,nullobj,S(Kelement_type));
 }
 
 /* UP: Check an endianness argument.
@@ -17020,14 +17067,15 @@ LISPFUN(write_float,seclass_default,3,1,norest,nokey,0,NIL) {
 /* UP: Checks, if an Argument is an open File-Stream.
  check_open_file_stream(obj);
  > obj: Argument
- < result: open File-Stream */
-local object check_open_file_stream (object obj, bool strict_p) {
+ > permissive_p: return nullobj instead of signaling an error
+ < result: open File-Stream (or maybe nullobj if permissive_p was true) */
+local object check_open_file_stream (object obj, bool permissive_p) {
  check_open_file_stream_restart:
   obj = resolve_synonym_stream(obj);
   if (streamp(obj) && TheStream(obj)->strmtype == strmtype_broad) {
     var object last_stream = broadcast_stream_last(obj);
     if (eq(last_stream,nullobj)) {
-      if (strict_p) goto error_bad_obj;
+      if (permissive_p) return nullobj;
       else return last_stream;
     } else obj = last_stream;
     goto check_open_file_stream_restart;
@@ -17042,6 +17090,7 @@ local object check_open_file_stream (object obj, bool strict_p) {
     goto error_bad_obj;
   return obj; /* yes -> OK */
  error_bad_obj:
+  if (permissive_p) return nullobj;
   pushSTACK(obj);                      /* TYPE-ERROR slot DATUM */
   pushSTACK(O(type_open_file_stream)); /* TYPE-ERROR slot EXPECTED-TYPE */
   pushSTACK(obj);
@@ -17052,12 +17101,16 @@ local object check_open_file_stream (object obj, bool strict_p) {
 /* extract the OS file handle from the file stream
  > stream: open Lisp file stream
  < fd: OS file handle
+ > permissive_p: return nullobj instead of signaling an error
  < result: either stream, or a corrected stream in case stream was invalid
+           or nullobj if permissive_p was true and the stream was invalid
  for syscall module
  can trigger GC */
-global maygc object open_file_stream_handle (object stream, Handle *fd) {
-  stream = check_open_file_stream(stream,true);
-  *fd = ChannelStream_ihandle(stream);
+global maygc object open_file_stream_handle (object stream, Handle *fd,
+                                             bool permissive_p) {
+  stream = check_open_file_stream(stream,permissive_p);
+  if (!eq(stream,nullobj))
+    *fd = ChannelStream_ihandle(stream);
   return stream;
 }
 
@@ -17121,7 +17174,7 @@ LISPFUN(file_position,seclass_default,1,1,norest,nokey,0,NIL)
         var stringarg arg;
         pushSTACK(TheStream(stream)->strm_str_in_string);
         switch (pos_type) {
-          case POS_SET_END:     /* :END */
+          case POS_SET_END: {   /* :END */
             pushSTACK(TheStream(stream)->strm_str_in_begindex);
             pushSTACK(TheStream(stream)->strm_str_in_endindex);
             test_string_limits_ro(&arg);
@@ -17129,28 +17182,28 @@ LISPFUN(file_position,seclass_default,1,1,norest,nokey,0,NIL)
             TheStream(stream)->strm_str_in_index =
               TheStream(stream)->strm_str_in_endindex;
             value1 = fixnum(arg.len);
-            break;
-          case POS_SET_START:   /* :START */
+          } break;
+          case POS_SET_START: { /* :START */
             TheStream(stream)->strm_str_in_index =
               TheStream(stream)->strm_str_in_begindex;
             value1 = Fixnum_0;
             skipSTACK(1);
-            break;
-          case POS_SET_OFF:     /* OFFSET */
+          } break;
+          case POS_SET_OFF: {   /* OFFSET */
             pushSTACK(TheStream(stream)->strm_str_in_begindex);
             pushSTACK(fixnum_inc(STACK_0,pos_off));
             test_string_limits_ro(&arg);
             stream = STACK_1; /* restore */
             TheStream(stream)->strm_str_in_index = fixnum(arg.index+arg.len);
             value1 = fixnum(arg.len); /* == pos */
-            break;
-          case POS_QUERY:       /* ask for position */
+          } break;
+          case POS_QUERY: {     /* ask for position */
             pushSTACK(TheStream(stream)->strm_str_in_begindex);
             pushSTACK(TheStream(stream)->strm_str_in_index);
             test_string_limits_ro(&arg);
             stream = STACK_1; /* restore */
             pos_off = arg.len;
-            goto get_position_common;
+          } goto get_position_common;
           default: NOTREACHED;
         }
        set_position_common:   /* value1 is pre-set! */
@@ -17185,7 +17238,7 @@ LISPFUN(file_position,seclass_default,1,1,norest,nokey,0,NIL)
       case strmtype_str_push: {
         var object string = TheStream(stream)->strm_str_push_string;
         switch (pos_type) {
-          case POS_SET_END:     /* :END */
+          case POS_SET_END: {   /* :END */
             /* Pretend that the "end" of the stream corresponds to the current
                fill-pointer. The array-dimension 0 wouldn't be the right choice
                because it depends on how the implementation increases the size
@@ -17195,14 +17248,14 @@ LISPFUN(file_position,seclass_default,1,1,norest,nokey,0,NIL)
                this is hairy to implement correctly. */
             value1 = fixnum(vector_length(string));
             /* No need to call set-fill-pointer because it would be a nop. */
-            break;
+          } break;
           case POS_SET_START:        /* :START, pos_off==0 already */
-          case POS_SET_OFF:          /* OFFSET */
+          case POS_SET_OFF: {        /* OFFSET */
             pushSTACK(string); pushSTACK(fixnum(pos_off)); C_set_fill_pointer();
-            break;
-          case POS_QUERY:
+          } break;
+          case POS_QUERY: {
             pos_off = vector_length(string);
-            goto get_position_common;
+          } goto get_position_common;
           default: NOTREACHED;
         }
         goto set_position_common;

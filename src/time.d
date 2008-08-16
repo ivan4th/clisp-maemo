@@ -282,11 +282,11 @@ global void get_running_times (timescore_t* tm)
   tm->gcfreed = gc_space;
 }
 
-#if TIME_METHOD == 2
 /* Converts an internal_time_t to a Lisp integer.
  internal_time_to_I(&it) */
-local object internal_time_to_I (const internal_time_t* tp)
+global object internal_time_to_I (const internal_time_t* tp)
 {
+#if TIME_METHOD == 2
  #ifdef TIME_UNIX
   /* Convert to microseconds: tp->tv_sec * ticks_per_second + tp->tv_usec */
   #ifdef intQsize
@@ -302,8 +302,12 @@ local object internal_time_to_I (const internal_time_t* tp)
  #ifdef TIME_WIN32
   return L2_to_I(tp->dwHighDateTime,tp->dwLowDateTime);
  #endif
-}
+#elif TIME_METHOD = 1
+  return UL_to_I(*tp);
+#else
+#error internal_time_to_I: invalid TIME_METHOD
 #endif
+}
 
 LISPFUNNR(get_internal_real_time,0)
 { /* (GET-INTERNAL-REAL-TIME), CLTL p. 446 */
@@ -700,6 +704,7 @@ LISPFUNN(sleep,2)
     var struct timeval start_time;
     var struct timeval end_time;
     if (!( gettimeofday(&start_time,NULL) ==0)) { OS_error(); }
+    begin_blocking_call();
    #ifdef HAVE_SELECT
     { /* select erlaubt eine wunderschöne Implementation von usleep(): */
       var struct timeval timeout; /* Zeitintervall */
@@ -714,6 +719,7 @@ LISPFUNN(sleep,2)
     if (useconds>0) { usleep(useconds); }
     #endif
    #endif
+    end_blocking_call();
     interruptp({
       end_system_call();
       pushSTACK(S(sleep)); tast_break(); /* evtl. Break-Schleife aufrufen */
@@ -823,7 +829,7 @@ LISPFUNNR(time,0)
   }
   /* Now tm.gcfreed = so far required space at all */
   #if (oint_data_len<24)
-  #error "Fix function SYS::%%TIME!"
+  #error Fix function SYS::%%TIME!
   #endif
   /* decode into 24 bits pieces: */
  #ifdef intQsize
@@ -835,7 +841,7 @@ LISPFUNNR(time,0)
  #endif
   /* last value: GC count */
   pushSTACK(fixnum(tm.gccount));
-  funcall(L(values),9);       /* return 9 values */
+  STACK_to_mv(9);               /* return 9 values */
 }
 
 /* (SYS::DELTA4 n1 n2 o1 o2 shift)
