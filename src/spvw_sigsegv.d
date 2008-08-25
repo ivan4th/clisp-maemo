@@ -20,6 +20,37 @@ local void install_stackoverflow_handler (uintL size);
 
 #if defined(GENERATIONAL_GC) || defined(NOCOST_SP_CHECK)
 local void print_mem_stats (void) {
+  var timescore_t tm;
+  get_running_times(&tm);
+  fprintf(stderr,GETTEXTL("GC count: %lu"),tm.gccount);
+  fputs("\n",stderr);
+  fputs(GETTEXTL("Space collected by GC:"),stderr);
+ #if defined(intQsize)
+  fprintf(stderr," %lu",tm.gcfreed);
+ #else
+  fprintf(stderr," %lu %lu",tm.gcfreed.hi,tm.gcfreed.lo);
+ #endif
+  fputs("\n",stderr);
+#if TIME_METHOD == 1
+ #define PRINT_INTERNAL_TIME(t) fprintf(stderr," %lu",t)
+#elif  TIME_METHOD == 2
+ #if defined(TIME_UNIX)
+  #define PRINT_INTERNAL_TIME(t) fprintf(stderr," %lu %lu",t.tv_sec,t.tv_usec)
+ #elif defined(TIME_WIN32)
+  #define PRINT_INTERNAL_TIME(t) fprintf(stderr," %lu %lu",t.dwHighDateTime,t.dwLowDateTime)
+ #else
+  #error print_mem_stats: TIME_METHOD == 2
+ #endif
+#else
+ #error print_mem_stats: TIME_METHOD == ???
+#endif
+  fputs(GETTEXTL("Run time:"),stderr);
+  PRINT_INTERNAL_TIME(tm.runtime); fputs("\n",stderr);
+  fputs(GETTEXTL("Real time:"),stderr);
+  PRINT_INTERNAL_TIME(tm.realtime); fputs("\n",stderr);
+  fputs(GETTEXTL("GC time:"),stderr);
+  PRINT_INTERNAL_TIME(tm.gctime); fputs("\n",stderr);
+ #undef PRINT_INTERNAL_TIME
   fprintf(stderr,GETTEXTL("Permanently allocated: %lu bytes."),
           (unsigned long) static_space());
   fputs("\n",stderr);
@@ -69,33 +100,8 @@ local void install_segv_handler (void) {
 
 #ifdef NOCOST_SP_CHECK
 
-local void stackoverflow_handler (int emergency, stackoverflow_context_t scp) {
-  if (emergency) {
-    fprintf(stderr,GETTEXTL("Apollo 13 scenario: Stack overflow handling failed. On the next stack overflow we will crash!!!"));
-    fputs("\n",stderr);
-    print_mem_stats();
-  }
-  /* Libsigsegv requires handlers to restore the normal signal mask
-   prior to resuming the application from the stack overflow handler. */
- #ifdef UNIX
-  /* Unblock signals blocked by libsigsegv/src/handler-unix.c:install_for()
-   Alternatively unblock all signals */
-  #if defined(SIGNALBLOCK_POSIX)
-  { var sigset_t sigblock_mask;
-    /* sigemptyset(&sigblock_mask);
-     sigaddset(&sigblock_mask,SIGSEGV);
-     sigaddset(&sigblock_mask,SIGBUS);
-     sigaddset(&sigblock_mask,SIGINT);
-     sigaddset(&sigblock_mask,SIGHUP);
-     and QUIT, TERM, PIPE, ALRM, IO and many more */
-    sigfillset(&sigblock_mask);
-    sigprocmask(SIG_UNBLOCK,&sigblock_mask,NULL);
-  }
-  #elif defined(SIGNALBLOCK_BSD)
-  sigsetmask(0);
-  #endif
- #endif
-  sigsegv_leave_handler();
+local void stackoverflow_handler_continuation (void* arg1, void* arg2, void* arg3) {
+  stackoverflow_context_t scp = (stackoverflow_context_t) arg1;
  #ifdef HAVE_SAVED_STACK
   /* Assign a reasonable value to STACK: */
   if (saved_STACK != NULL) {
@@ -174,6 +180,36 @@ local void stackoverflow_handler (int emergency, stackoverflow_context_t scp) {
   }
  #endif
   SP_ueber();
+}
+
+local void stackoverflow_handler (int emergency, stackoverflow_context_t scp) {
+  if (emergency) {
+    fprintf(stderr,GETTEXTL("Apollo 13 scenario: Stack overflow handling failed. On the next stack overflow we will crash!!!"));
+    fputs("\n",stderr);
+    print_mem_stats();
+  }
+  /* Libsigsegv requires handlers to restore the normal signal mask
+   prior to resuming the application from the stack overflow handler. */
+ #ifdef UNIX
+  /* Unblock signals blocked by libsigsegv/src/handler-unix.c:install_for()
+   Alternatively unblock all signals */
+  { var sigset_t sigblock_mask;
+    /* sigemptyset(&sigblock_mask);
+     sigaddset(&sigblock_mask,SIGSEGV);
+     sigaddset(&sigblock_mask,SIGBUS);
+     sigaddset(&sigblock_mask,SIGINT);
+     sigaddset(&sigblock_mask,SIGHUP);
+     and QUIT, TERM, PIPE, ALRM, IO and many more */
+    sigfillset(&sigblock_mask);
+    sigprocmask(SIG_UNBLOCK,&sigblock_mask,NULL);
+  }
+ #endif
+ #if LIBSIGSEGV_VERSION >= 0x0206
+  sigsegv_leave_handler(stackoverflow_handler_continuation,scp,NULL,NULL);
+ #else
+  sigsegv_leave_handler();
+  stackoverflow_handler_continuation(scp,NULL,NULL);
+ #endif
 }
 
 /* Must allocate room for a substitute stack for the stack overflow
