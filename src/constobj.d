@@ -330,9 +330,9 @@
   LISPOBJ(memory_image_timestamp,"NIL") /* the dump date of the current image */
   LISPOBJ(memory_image_host,"NIL") /* the host on which this image was dumped */
   /* The date of the last change of the bytecode interpreter
-     or the arglist of any built-in function in FUNTAB */
-  /* when changing, remove legacy ABI  */
-  LISPOBJ(version,"(20080214)")
+     or the arglist of any built-in function in FUNTAB or FUNTABR */
+  /* when changing, remove legacy ABI! */
+  LISPOBJ(version,"(20080430)")
 #ifdef MACHINE_KNOWN
   LISPOBJ(machine_type_string,"NIL")
   LISPOBJ(machine_version_string,"NIL")
@@ -410,7 +410,7 @@
   LISPOBJ(type_if_exists,"(MEMBER :ERROR :NEW-VERSION :RENAME :RENAME-AND-DELETE :OVERWRITE :APPEND :SUPERSEDE NIL)")
   LISPOBJ(type_if_does_not_exist,"(MEMBER :ERROR :CREATE NIL)")
   LISPOBJ(type_directory_not_exist,"(MEMBER :DISCARD :ERROR :KEEP :IGNORE)")
-  LISPOBJ(type_external_format,"(OR (MEMBER :DEFAULT) EXT::ENCODING (MEMBER :UNIX :MAC :DOS))")
+  LISPOBJ(type_external_format,"(OR EXT::ENCODING (MEMBER :DEFAULT :UNIX :MAC :DOS))")
   LISPOBJ(type_pathname_field_key,"(MEMBER :HOST :DEVICE :DIRECTORY :NAME :TYPE :VERSION NIL)")
  #ifdef SOCKET_STREAMS
   LISPOBJ(type_socket_option,"(MEMBER :SO-DEBUG : SO-ACCEPTCONN :SO-BROADCAST :SO-REUSEADDR :SO-DONTROUTE :SO-KEEPALIVE :SO-ERROR :SO-LINGER :SO-OOBINLINE :SO-TYPE :SO-RCVBUF :SO-SNDBUF :SO-RCVLOWAT :SO-SNDLOWAT :SO-RCVTIMEO :SO-SNDTIMEO)")
@@ -498,9 +498,8 @@
   LISPOBJ(type_input_stream,"(SATISFIES INPUT-STREAM-P)") /* type for error-message */
   LISPOBJ(type_output_stream,"(SATISFIES OUTPUT-STREAM-P)") /* type for error-message */
   LISPOBJ(type_string_with_fill_pointer,"(AND STRING (SATISFIES ARRAY-HAS-FILL-POINTER-P))") /* type for error-message */
-#if defined(GNU_READLINE)
+  /* also used in PATHNAME */
   LISPOBJ(handler_for_charset_type_error,"(#(SYSTEM::CHARSET-TYPE-ERROR NIL))")
-#endif
   LISPOBJ(setf_stream_element_type,"(SETF STREAM-ELEMENT-TYPE)")
   LISPOBJ(type_endianness,"(MEMBER :LITTLE :BIG)") /* type for error-message */
   LISPOBJ(type_open_file_stream,"(AND FILE-STREAM (SATISFIES OPEN-STREAM-P))") /* type for error-message */
@@ -508,6 +507,7 @@
   LISPOBJ(standard_input_file_stream,"NIL")
   LISPOBJ(standard_output_file_stream,"NIL")
   LISPOBJ(standard_error_file_stream,"NIL")
+  LISPOBJ(type_buffered_arg,"(MEMBER :DEFAULT T NIL)")
 /* for IO.D:
    four readtable-case-values: */
   LISPOBJ(rtcase_0,":UPCASE")
@@ -643,6 +643,9 @@
   LISPOBJ_S(printstring_thread,"THREAD")
   LISPOBJ_S(printstring_mutex,"MUTEX")
   LISPOBJ_S(printstring_exemption,"EXEMPTION")
+
+  LISPOBJ(all_threads,"NIL")
+  LISPOBJ(threads_to_release,"NIL")
 #endif
 /* for LISPARIT.D:
    various constant numbers: */
