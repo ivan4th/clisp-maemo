@@ -1,6 +1,6 @@
 /*
  * EVAL, APPLY and bytecode interpreter for CLISP
- * Bruno Haible 1990-2005
+ * Bruno Haible 1990-2008
  * Sam Steingold 1998-2008
  * German comments translated into English: Stefan Kain 2001-08-13
  */
@@ -42,13 +42,13 @@ local const Subr FUNTAB[] = {
   _(nstring_upcase), _(string_upcase), _(nstring_downcase),
   _(string_downcase), _(nstring_capitalize), _(string_capitalize),
   _(string), _(cs_string), _(name_char), _(substring),
-  /* CONTROL : 24-2 SUBRs */
+  /* CONTROL : 25-2 SUBRs */
   _(symbol_value), /* _(symbol_function), */ _(fdefinition), _(boundp),
   _(fboundp), _(special_operator_p), _(set), _(makunbound), _(fmakunbound),
   /* _(values_list), */ _(driver), _(unwind_to_driver), _(macro_function),
   _(macroexpand), _(macroexpand_1), _(proclaim), _(eval),
   _(evalhook), _(applyhook), _(constantp), _(function_side_effect),
-  _(function_name_p),_(parse_body), _(keyword_test),
+  _(function_name_p),_(parse_body), _(keyword_test), _(check_function_name),
   /* DEBUG : 0 SUBRs */
   /* ERROR : 1 SUBR */
   _(invoke_debugger),
@@ -86,7 +86,7 @@ local const Subr FUNTAB[] = {
   _(lisp_implementation_type), _(lisp_implementation_version),
   _(software_type), _(software_version), _(identity), _(get_universal_time),
   _(get_internal_run_time), _(get_internal_real_time), _(sleep), _(time),
-  /* PACKAGE : 31 SUBRs */
+  /* PACKAGE : 32 SUBRs */
   _(make_symbol), _(find_package), _(package_name), _(package_nicknames),
   _(rename_package), _(package_use_list), _(package_used_by_list),
   _(package_shadowing_symbols), _(list_all_packages), _(intern), _(cs_intern),
@@ -106,7 +106,7 @@ local const Subr FUNTAB[] = {
   _(delete_file), _(rename_file), _(open), _(directory), _(cd),
   _(make_directory), _(delete_directory), _(file_write_date), _(file_author),
   _(savemem),
-  /* PREDTYPE : 44-3 SUBRs */
+  /* PREDTYPE : 48-3 SUBRs */
   /* _(eq), */ _(eql), _(equal), _(equalp), _(consp), _(atom), _(symbolp),
   _(stringp), _(numberp), _(compiled_function_p), /* _(null), _(not), */
   _(closurep), _(listp), _(integerp), _(fixnump), _(rationalp), _(floatp),
@@ -115,17 +115,20 @@ local const Subr FUNTAB[] = {
   _(hash_table_p), _(pathnamep), _(logical_pathname_p), _(characterp),
   _(functionp), _(packagep), _(arrayp), _(simple_array_p), _(bit_vector_p),
   _(vectorp), _(simple_vector_p), _(simple_string_p), _(simple_bit_vector_p),
-  _(type_of), _(class_of), _(find_class), _(coerce),
-  /* RECORD : 22 SUBRs */
+  _(type_of), _(class_of), _(find_class), _(coerce), _(typep_class),
+  _(defined_class_p), _(proper_list_p), _(pcompiled_function_p),
+  /* RECORD : 29 SUBRs */
   _(record_ref), _(record_store), _(record_length), _(structure_ref),
   _(structure_store), _(make_structure), _(copy_structure),
   _(structure_type_p), _(closure_name), _(closure_codevec),
-  _(closure_consts), _(make_closure),
+  _(closure_consts), _(make_closure), _(make_macro),
   _(copy_generic_function), _(make_load_time_eval),
   _(function_macro_function), _(structure_object_p), _(std_instance_p),
   _(slot_value), _(set_slot_value), _(slot_boundp), _(slot_makunbound),
-  _(slot_exists_p),
-  /* SEQUENCE : 40 SUBRs */
+  _(slot_exists_p), _(macrop), _(macro_expander), _(symbol_macro_p),
+  _(symbol_macro_expand),
+  _(standard_instance_access), _(set_standard_instance_access),
+  /* SEQUENCE : 40-1 SUBRs */
   _(sequencep), _(elt), _(setelt), _(subseq), _(copy_seq), _(length),
   _(reverse), _(nreverse), _(make_sequence), _(reduce), _(fill),
   _(replace), _(remove), _(remove_if), _(remove_if_not), _(delete),
@@ -134,7 +137,7 @@ local const Subr FUNTAB[] = {
   _(substitute_if_not), _(nsubstitute), _(nsubstitute_if),
   _(nsubstitute_if_not), _(find), _(find_if), _(find_if_not), _(position),
   _(position_if), _(position_if_not), _(count), _(count_if),
-  _(count_if_not), _(mismatch), _(search), _(sort), _(stable_sort),
+  _(count_if_not), _(mismatch), _(search), _(sort), /* _(stable_sort), */
   _(merge),
   /* STREAM : 24 SUBRs */
   _(file_stream_p), _(make_synonym_stream), _(synonym_stream_p),
@@ -166,10 +169,11 @@ local const Subr FUNTAB[] = {
   _(ldb), _(ldb_test), _(mask_field), _(dpb), _(deposit_field), _(random),
   _(make_random_state), _(factorial), _(exquo), _(long_float_digits),
   _(set_long_float_digits), _(log2), _(log10),
-  /* other: */
-}; /* that were 500 = 541 - 41 SUBRs.
-     (- (+ 0 3 30 54 24 0 11 38 84 10 31 27 44 22 40 24 15 84)
-        (+ 0 0  2  0  0 0  0  0 36  0  0  0  3  0  0  0  0  0)) */
+  /* ENCODING: 1 SUBRs */
+  _(encodingp),
+}; /* that were 512 = 556 - 44 SUBRs.
+     (- (+ 0 3 30 54 25 0 1 11 38 84 10 32 27 48 29 40 24 15 84 1)
+        (+ 0 0  2  0  2 0 0  0  0 36  0  0  0  3  0  1  0  0  0 0)) */
 /* Now FUNTABR : */
 local const Subr FUNTABR[] = {
   /* SPVW : 0 SUBRs */
@@ -182,9 +186,9 @@ local const Subr FUNTABR[] = {
   _(char_ltequal), _(char_gtequal), _(char_equal), _(char_not_equal),
   _(char_lessp), _(char_greaterp), _(char_not_greaterp), _(char_not_lessp),
   _(string_concat),
-  /* CONTROL : 9 SUBRs */
+  /* CONTROL : 10 SUBRs */
   _(apply), _(funcall), _(mapcar), _(maplist), _(mapc),
-  _(mapl), _(mapcan), _(mapcon), _(values),
+  _(mapl), _(mapcan), _(mapcap), _(mapcon), _(values),
   /* DEBUG : 0 SUBRs */
   /* ERROR : 2 SUBRs */
   _(error), _(error_of_type),
@@ -209,12 +213,32 @@ local const Subr FUNTABR[] = {
   _(numequal), _(numunequal), _(smaller), _(greater), _(ltequal),
   _(gtequal), _(max), _(min), _(plus), _(minus), _(star), _(slash), _(gcd),
   _(xgcd), _(lcm), _(logior), _(logxor), _(logand), _(logeqv)
-}; /* That were (+ 0 0 7 13 9 0 2 1 0 4 0 0 0 0 1 7 2 0 19) = 65 SUBRs. */
+}; /* That were (+ 0 0 7 13 10 0 2 1 0 4 0 0 0 0 1 7 2 0 19) = 66 SUBRs. */
 #undef _
 #define FUNTAB1  (&FUNTAB[0])
 #define FUNTAB2  (&FUNTAB[256])
 #define FUNTAB_length  (sizeof(FUNTAB)/sizeof(Subr))
 #define FUNTABR_length  (sizeof(FUNTABR)/sizeof(Subr))
+
+#if defined(DEBUG_SPVW)
+local void check_funtab (void) {
+  uintL i;
+  for (i=0; i < FUNTAB_length; i++)
+    if (FUNTAB[i]->rest_flag != subr_norest) {
+      nobject_out(stdout,FUNTAB[i]->name);
+      printf("=FUNTAB[%d] accepts &rest\n",i);
+    }
+  for (i=0; i < FUNTABR_length; i++)
+    if (FUNTABR[i]->rest_flag != subr_rest) {
+      nobject_out(stdout,FUNTABR[i]->name);
+      printf("=FUNTABR[%d] does NOT accept &rest\n",i);
+    }
+  printf("FUNTAB_length=%d\n",FUNTAB_length);
+  if (FUNTAB_length > 512) printf(" *** - > 512!\n");
+  printf("FUNTABR_length=%d\n",FUNTABR_length);
+  if (FUNTABR_length > 256) printf(" *** - > 256!\n");
+}
+#endif
 
 /* argument-type-tokens for compiled closures: */
 typedef enum {
@@ -289,12 +313,16 @@ local /*maygc*/ Values interpret_bytecode_ (object closure, Sbvector codeptr,
 
 #if defined(USE_JITC)
 /* replacement for interpret_bytecode_ */
-local /*maygc*/ Values jit_run (object closure_in, Sbvector codeptr,
-                                const uintB* byteptr_in);
+local /*maygc*/ Values jitc_run (object closure_in, Sbvector codeptr,
+                                 const uintB* byteptr_in);
+local inline /*maygc*/ Values cclosure_run (object closure_in, Sbvector codevec,
+                                            const uintB* byteptr_in) {
+  if (cclosure_jitc_p(closure_in)) jitc_run(closure_in,codevec,byteptr_in);
+  else interpret_bytecode_(closure_in,codevec,byteptr_in);
+}
 #define interpret_bytecode(closure,codevec,index)                       \
   with_saved_back_trace_cclosure(closure,                               \
-    if (cclosure_jitc_p(closure)) jit_run(closure,TheSbvector(codevec),&TheSbvector(codevec)->data[index]); \
-    else interpret_bytecode_(closure,TheSbvector(codevec),&TheSbvector(codevec)->data[index]); )
+    cclosure_run(closure,TheSbvector(codevec),&TheSbvector(codevec)->data[index]); )
 #else
 #define interpret_bytecode(closure,codevec,index)                       \
   with_saved_back_trace_cclosure(closure,                               \
@@ -361,7 +389,7 @@ LISPFUNNR(subr_info,1)
   /* keyword-vector as list (during bootstrap: vector) */
   pushSTACK(eq(value1,nullobj) ? (object)TheSubr(obj)->keywords : value1);
   pushSTACK(TheSubr(obj)->key_flag == subr_key_allow ? T : NIL); /* allow-other-keys */
-  funcall(L(values),6); /* 6 values */
+  STACK_to_mv(6);               /* 6 values */
 }
 
 
@@ -459,7 +487,7 @@ global /*maygc*/ void unwind (void)
                   if (as_oint(*(bindingptr STACKop 0)) & wbit(active_bit_o)) {
                     /* binding static or inactive -> nothing to do
                        binding dynamic and active -> write back value: */
-                    TheSymbolflagged(*(bindingptr STACKop varframe_binding_sym))->symvalue =
+		    Symbolflagged_value(*(bindingptr STACKop varframe_binding_sym)) =
                       *(bindingptr STACKop varframe_binding_value);
                   }
                 bindingptr skipSTACKop varframe_binding_size; /* next binding */
@@ -699,7 +727,7 @@ global maygc void invoke_handlers (object cond) {
           pushSTACK(TheSvector(Car(FRAME_(frame_handlers)))->data[i]); /* typei */
           funcall(S(safe_typep),2); /* execute (SYS::SAFE-TYPEP cond typei) */
           if (!nullp(value1)) { /* found a suitable handler */
-            /* CLtL2 S. 873, 884:
+            /* CLtL2 p. 873, 884:
                "A handler is executed in the dynamic context
                of the signaler, except that the set of available condition
                handlers will have been rebound to the value that was active
@@ -722,9 +750,9 @@ global maygc void invoke_handlers (object cond) {
               fun(arg);
               NOTREACHED;
             });
-            /* deactivate Handler: */
-            inactive_handlers = &new_range;
             if (!nullp(Cdr(FRAME_(frame_handlers)))) {
+              /* deactivate Handler: */
+              inactive_handlers = &new_range;
               /* make information available for Handler: */
               handler_args.condition = STACK_(0+2);
               handler_args.stack = FRAME STACKop 4;
@@ -736,8 +764,9 @@ global maygc void invoke_handlers (object cond) {
               var uintL index = (TheCodevec(codevec)->ccv_flags & bit(7) ? CCV_START_KEY : CCV_START_NONKEY)
                 + (uintL)posfixnum_to_V(TheSvector(Car(FRAME_(frame_handlers)))->data[i+1]);
               interpret_bytecode(closure,codevec,index);
-            } else {
-              /* call C-Handler: */
+              /* reactivate Handler: */
+              inactive_handlers = saved_inactive_handlers;
+            } else { /* call C-Handler - it must deactivate itself! */
               void* handler_fn = TheMachineCode(FRAME_(frame_closure));
               ((void (*) (void*, gcv_object_t*, object, object)) handler_fn)
                 ((void*)(aint)as_oint(FRAME_(frame_SP)),FRAME,
@@ -745,8 +774,6 @@ global maygc void invoke_handlers (object cond) {
                  STACK_(0+2));
             }
             skipSTACK(2); /* unwind Unwind-Protect-Frame */
-            /* reactivate Handler: */
-            inactive_handlers = saved_inactive_handlers;
           }
           cond = popSTACK(); /* cond back */
           i += 2;
@@ -1509,7 +1536,7 @@ global maygc bool parse_dd (object formlist)
     var object body_rest = Cdr(body); /* shorten body */
     if (stringp(form)) { /* found Doc-String? */
       if (atomp(body_rest)) /* at the last position of the form list? */
-        goto done; /* yes -> last form can't be a Doc-String! */
+        break; /* yes -> last form can't be a Doc-String! */
       if (!nullp(STACK_1)) { /* preceding Doc-String? */
         /* yes -> more than one Doc-String is too much: */
         pushSTACK(STACK_2);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
@@ -1544,8 +1571,7 @@ global maygc bool parse_dd (object formlist)
       }
       skipSTACK(1);
       body = popSTACK(); /* body := old body_rest */
-    } else {
-     done: /* finished with loop over the form list */
+    } else { /* finished with loop over the form list */
       break;
     }
   }
@@ -1562,18 +1588,17 @@ global maygc bool parse_dd (object formlist)
  > applyhook_value: value for *APPLYHOOK*
  changes STACK */
 global void bindhooks (object evalhook_value, object applyhook_value) {
-  /* build frame: */
-  {
-    var gcv_object_t* top_of_frame = STACK;    /* Pointer to Frame */
-    pushSTACK(Symbol_value(S(evalhookstern))); /* old value of *EVALHOOK* */
-    pushSTACK(S(evalhookstern));               /* *EVALHOOK* */
-    pushSTACK(Symbol_value(S(applyhookstern))); /* old value of *APPLYHOOK* */
-    pushSTACK(S(applyhookstern));               /* *APPLYHOOK* */
+  { /* build frame: */
+    var gcv_object_t* top_of_frame = STACK; /* Pointer to Frame */
+    pushSTACK(Symbol_value(S(evalhookstar))); /* old value of *EVALHOOK* */
+    pushSTACK(S(evalhookstar));               /* *EVALHOOK* */
+    pushSTACK(Symbol_value(S(applyhookstar))); /* old value of *APPLYHOOK* */
+    pushSTACK(S(applyhookstar));               /* *APPLYHOOK* */
     finish_frame(DYNBIND);
   }
   /* Frame got ready, now change the values of the variables: */
-  Symbol_value(S(evalhookstern)) = evalhook_value; /* (SETQ *EVALHOOK* evalhook_value) */
-  Symbol_value(S(applyhookstern)) = applyhook_value; /* (SETQ *APPLYHOOK* applyhook_value) */
+  Symbol_value(S(evalhookstar)) = evalhook_value; /* (SETQ *EVALHOOK* evalhook_value) */
+  Symbol_value(S(applyhookstar)) = applyhook_value; /* (SETQ *APPLYHOOK* applyhook_value) */
 }
 
 /* UP: binds *EVALHOOK* and *APPLYHOOK* dynamically to NIL.
@@ -1969,30 +1994,31 @@ global maygc object get_closure (object lambdabody, object name, bool blockp,
       TheIclosure(closure)->clos_opt_inits = new_cons;
     }
   }
- rest: /* process &REST-parameter and push on Stack: */
-  NEXT_ITEM(badrest,badrest,badrest,badrest,badrest,badrest);
-  item = check_symbol_non_constant(item,S(function));
-  Car(*lalist_save_) = item;
-  /* push variable on STACK: */
-  pushSTACK(item); pushSTACK(Fixnum_0); var_count++;
-  /* set Rest-Flag to T: */
-  TheIclosure(*closure_)->clos_rest_flag = T;
-  NEXT_ITEM(badLLkey,badLLkey,key,badLLkey,aux,ende);
-  pushSTACK(item);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
-  pushSTACK(S(LLaux)); pushSTACK(S(LLkey));
-  pushSTACK(S(LLrest)); pushSTACK(S(function));
-  error(source_program_error,
-         GETTEXT("~S: ~S var must be followed by ~S or ~S or end of list: ~S"));
- badrest:
-  pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
-  pushSTACK(STACK_0);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(S(LLrest)); pushSTACK(S(function));
-  error(source_program_error,
-         GETTEXT("~S: ~S must be followed by a variable: ~S"));
+ rest: { /* process &REST-parameter and push on Stack: */
+    NEXT_ITEM(badrest,badrest,badrest,badrest,badrest,badrest);
+    item = check_symbol_non_constant(item,S(function));
+    Car(*lalist_save_) = item;
+    /* push variable on STACK: */
+    pushSTACK(item); pushSTACK(Fixnum_0); var_count++;
+    /* set Rest-Flag to T: */
+    TheIclosure(*closure_)->clos_rest_flag = T;
+    NEXT_ITEM(badLLkey,badLLkey,key,badLLkey,aux,ende);
+    pushSTACK(item);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
+    pushSTACK(S(LLaux)); pushSTACK(S(LLkey));
+    pushSTACK(S(LLrest)); pushSTACK(S(function));
+    error(source_program_error,GETTEXT("~S: ~S var must be followed by ~S or ~S or end of list: ~S"));
+  }
+ badrest: {
+    pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
+    pushSTACK(STACK_0);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(S(LLrest)); pushSTACK(S(function));
+    error(source_program_error,
+          GETTEXT("~S: ~S must be followed by a variable: ~S"));
+  }
  key: /* process &KEY-Parameter, push on STACK
          and put Init-Forms in the Closure: */
-  TheIclosure(*closure_)->clos_keywords = NIL; /* keywords:=NIL */
+  { TheIclosure(*closure_)->clos_keywords = NIL; } /* keywords:=NIL */
   while(1) {
     NEXT_ITEM(badLLkey,badLLkey,badLLkey,allow,aux,ende);
     var object keyword;
@@ -2078,21 +2104,23 @@ global maygc object get_closure (object lambdabody, object name, bool blockp,
       TheIclosure(closure)->clos_key_inits = new_cons;
     }
   }
- error_keyspec:
-  pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
-  pushSTACK(STACK_0);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(S(LLkey)); pushSTACK(S(function));
-  error(source_program_error,
-         GETTEXT("~S: incorrect variable specification after ~S: ~S"));
- allow: /* process &ALLOW-OTHER-KEYS: */
-  TheIclosure(*closure_)->clos_allow_flag = T; /* set Flag to T */
-  NEXT_ITEM(badLLkey,badLLkey,badLLkey,badLLkey,aux,ende);
-  pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
-  pushSTACK(STACK_0);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(S(LLaux)); pushSTACK(S(LLallow_other_keys));
-  pushSTACK(S(function));
-  error(source_program_error,
-         GETTEXT("~S: ~S must be followed by ~S or end of list: ~S"));
+ error_keyspec: {
+    pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
+    pushSTACK(STACK_0);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(S(LLkey)); pushSTACK(S(function));
+    error(source_program_error,
+          GETTEXT("~S: incorrect variable specification after ~S: ~S"));
+  }
+ allow: { /* process &ALLOW-OTHER-KEYS: */
+    TheIclosure(*closure_)->clos_allow_flag = T; /* set Flag to T */
+    NEXT_ITEM(badLLkey,badLLkey,badLLkey,badLLkey,aux,ende);
+    pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
+    pushSTACK(STACK_0);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(S(LLaux)); pushSTACK(S(LLallow_other_keys));
+    pushSTACK(S(function));
+    error(source_program_error,
+          GETTEXT("~S: ~S must be followed by ~S or end of list: ~S"));
+  }
  aux: /* process &AUX-Parameter, push on STACK and
          put Init-Forms in the Closure: */
   while(1) {
@@ -2139,12 +2167,13 @@ global maygc object get_closure (object lambdabody, object name, bool blockp,
     }
   }
   /* Collected error messages: */
- badLLkey:
-  pushSTACK(item);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
-  pushSTACK(item); pushSTACK(S(function));
-  error(source_program_error,
-         GETTEXT("~S: badly placed lambda-list keyword ~S: ~S"));
+ badLLkey: {
+    pushSTACK(item);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(*(closure_ STACKop -1)); /* entire Lambda-List */
+    pushSTACK(item); pushSTACK(S(function));
+    error(source_program_error,
+          GETTEXT("~S: badly placed lambda-list keyword ~S: ~S"));
+  }
  ende: /* reached list-end */
 #undef NEXT_ITEM
   if (((uintL)~(uintL)0 > lp_limit_1) && (var_count > lp_limit_1)) {
@@ -2498,9 +2527,9 @@ local maygc Values funcall_iclosure (object closure, gcv_object_t* args_pointer,
         /* activate dynamic Binding: */                                 \
         var object sym = *(markptr STACKop varframe_binding_sym); /* var */ \
         *(markptr STACKop varframe_binding_value) = /* old value in frame */ \
-          TheSymbolflagged(sym)->symvalue;                              \
+          Symbolflagged_value(sym);	\
         /* new value in value-cell: */                                  \
-        TheSymbolflagged(sym)->symvalue = (value);                      \
+        Symbolflagged_value(sym) = (value);				\
         activate_specdecl(sym,spec_ptr,spec_count);                     \
       } else { /* activate static binding: */                           \
         /* new value in frame: */                                       \
@@ -2905,8 +2934,7 @@ global maygc Values eval (object form)
     goto start;
   });
   var sp_jmp_buf my_jmp_buf;
-  /* build EVAL-frame: */
-  {
+  { /* build EVAL-frame: */
     var gcv_object_t* top_of_frame = STACK; /* Pointer to Frame */
     pushSTACK(form);                        /* Form */
     finish_entry_frame(EVAL,my_jmp_buf,,
@@ -2918,12 +2946,11 @@ global maygc Values eval (object form)
         }
       });
   }
-  /* Test for *EVALHOOK*: */
-  {
-    var object evalhook_value = Symbol_value(S(evalhookstern)); /* *EVALHOOK* */
+  { /* Test for *EVALHOOK*: */
+    var object evalhook_value = Symbol_value(S(evalhookstar)); /* *EVALHOOK* */
     if (nullp(evalhook_value)) { /* *EVALHOOK* = NIL ? */
       /* yes -> continue evaluation normally */
-      pushSTACK(Symbol_value(S(applyhookstern))); eval1(form);
+      pushSTACK(Symbol_value(S(applyhookstar))); eval1(form);
     } else {
       /* bind *EVALHOOK*, *APPLYHOOK* to NIL: */
       bindhooks_NIL();
@@ -2993,25 +3020,17 @@ local maygc Values eval1 (object form)
         skipSTACK(1); /* forget value of *APPLYHOOK* */
         check_SP(); check_STACK();
         eval(TheSymbolmacro(symbolmacro)->symbolmacro_expansion); /* evaluate Expansion */
-        unwind(); /* unwind EVAL-Frame */
       } else {
         if (!boundp(value1)) {
-          do {
-            pushSTACK(form); /* PLACE */
-            pushSTACK(form); /* CELL-ERROR slot NAME */
-            pushSTACK(form);
-            check_value(unbound_variable,GETTEXT("EVAL: variable ~S has no value"));
-            form = STACK_(frame_form+1);
-          } while (!boundp(value1));
-          if (!nullp(value2)) /* STORE-VALUE */
-            value1 = setq(form,value1);
+          check_variable_value_replacement(&(STACK_(frame_form+1)),true);
+          if (eq(T,value2)) /* STORE-VALUE */
+            value1 = setq(STACK_(frame_form+1),value1);
         }
         mv_count=1; /* value1 as value */
         skipSTACK(1);
-        unwind(); /* unwind EVAL-Frame */
       }
-    } else {
-      /* self-evaluating form */
+      unwind();                 /* unwind EVAL-Frame */
+    } else {                    /* self-evaluating form */
       VALUES1(form);
       skipSTACK(1);
       unwind(); /* unwind EVAL-Frame */
@@ -3282,7 +3301,7 @@ nonreturning_function(local, error_eval_toofew, (object fun)) {
   pushSTACK(form); pushSTACK(fun);
   /* ANSI CL 3.5.1.2. wants a PROGRAM-ERROR here. */
   error(source_program_error,
-         GETTEXT("EVAL: too few arguments given to ~S: ~S"));
+        GETTEXT("EVAL: too few arguments given to ~S: ~S"));
 }
 
 /* In EVAL: error, if too many arguments */
@@ -3292,17 +3311,17 @@ nonreturning_function(local, error_eval_toomany, (object fun)) {
   pushSTACK(form); pushSTACK(fun);
   /* ANSI CL 3.5.1.3. wants a PROGRAM-ERROR here. */
   error(source_program_error,
-         GETTEXT("EVAL: too many arguments given to ~S: ~S"));
+        GETTEXT("EVAL: too many arguments given to ~S: ~S"));
 }
 
 /* In EVAL: error, if dotted argument-list */
-nonreturning_function(local, error_eval_dotted, (object fun)) {
-  var object form = STACK_(frame_form); /* Form */
+nonreturning_function(global, error_dotted_form, (object form, object fun)) {
   pushSTACK(form); /* SOURCE-PROGRAM-ERROR slot DETAIL */
   pushSTACK(form); pushSTACK(fun);
   error(source_program_error,
-         GETTEXT("EVAL: argument list given to ~S is dotted: ~S"));
+        GETTEXT("EVAL: argument list given to ~S is dotted: ~S"));
 }
+#define error_eval_dotted(fun)  error_dotted_form(STACK_(frame_form),fun)
 
 /* In EVAL: Applies an SUBR to an argument-list, cleans up STACK
  and returns the values.
@@ -3396,15 +3415,15 @@ local maygc Values eval_subr (object fun)
       if (!nullp(args)) goto error_toomany;
       goto apply_subr_norest;
     unbound_optional_5: /* Still 5 optional Arguments, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_4: /* Still 4 optional Arguments, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_3: /* Still 3 optional Arguments, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_2: /* Still 2 optional Arguments, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_1: /* Still 1 optional Argument, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
       if (!nullp(args)) goto error_dotted;
       goto apply_subr_norest;
     case (uintW)subr_argtype_3_0_rest: /* SUBR with 3 required and rest */
@@ -3451,9 +3470,9 @@ local maygc Values eval_subr (object fun)
       if (atomp(args)) goto unbound_optional_key_0;
       goto apply_subr_key;
     unbound_optional_key_2: /* Silll 2 optional Arguments, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_key_1: /* Still 1 optional Argument, but atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_key_0:     /* Before the keywords is atomp(args) */
       {
         var uintC count;
@@ -3675,15 +3694,15 @@ local maygc Values eval_closure (object closure)
         OPT_ARG(5);
         goto noch_4_opt_args;
       unbound_optional_5: /* Still 5 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_4: /* Still 4 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_3: /* Still 3 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_2: /* Still 2 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_1: /* Still 1 optional Argument, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
         if (!nullp(args)) goto error_dotted;
         goto apply_cclosure_nokey;
       case (uintB)cclos_argtype_4_0_rest: /* 4 required  + &rest */
@@ -3697,7 +3716,7 @@ local maygc Values eval_closure (object closure)
       case (uintB)cclos_argtype_0_0_rest: /* no Arguments, Rest-Parameter */
         if (consp(args)) goto apply_cclosure_rest_nokey;
         if (!nullp(args)) goto error_dotted;
-        pushSTACK(NIL);         /* Rest-Parameter := NIL */
+        { pushSTACK(NIL); }     /* Rest-Parameter := NIL */
         goto apply_cclosure_nokey;
       case (uintB)cclos_argtype_4_0_key: /* 4 required arguments, &key */
         REQ_ARG();
@@ -3745,13 +3764,13 @@ local maygc Values eval_closure (object closure)
         OPT_ARG(key_4);
         goto noch_3_opt_args_key;
       unbound_optional_key_4: /* Still 4 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_3: /* Still 3 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_2: /* Still 2 optional Arguments, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_1: /* Still 1 optional Argument, but atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_0:   /* Before the Keywords is atomp(args) */
         if (!nullp(args)) goto error_dotted;
         goto apply_cclosure_key_noargs;
@@ -3857,27 +3876,28 @@ local maygc Values eval_closure (object closure)
       interpret_bytecode(closure,codevec,CCV_START_KEY); /* interprete bytecode starting at Byte 12 */
     }
     goto done;
-   apply_cclosure_rest_nokey:
-    /* Closure with only REST, without KEY:
-     evaluate remaining arguments one by on, put into list
-     args = remaining argument-list (not yet finished) */
-    pushSTACK(NIL);           /* so far evaluated remaining arguments */
-    pushSTACK(args);          /* remaining arguments, unevaluated */
-    do {
-      args = STACK_0; STACK_0 = Cdr(args);
-      eval(Car(args));          /* evaluate next argument */
-      pushSTACK(value1);
-      /* and cons onto the list: */
-      var object new_cons = allocate_cons();
-      Car(new_cons) = popSTACK();
-      Cdr(new_cons) = STACK_1;
-      STACK_1 = new_cons;
-    } while (mconsp(STACK_0));
-    args = popSTACK();
-    /* reverse list STACK_0 and use as REST-parameter: */
-    nreverse(STACK_0);
-    /* argument-list finished. */
-    if (!nullp(args)) goto error_dotted;
+   apply_cclosure_rest_nokey: {
+      /* Closure with only REST, without KEY:
+         evaluate remaining arguments one by on, put into list
+         args = remaining argument-list (not yet finished) */
+      pushSTACK(NIL);           /* so far evaluated remaining arguments */
+      pushSTACK(args);          /* remaining arguments, unevaluated */
+      do {
+        args = STACK_0; STACK_0 = Cdr(args);
+        eval(Car(args));          /* evaluate next argument */
+        pushSTACK(value1);
+        /* and cons onto the list: */
+        var object new_cons = allocate_cons();
+        Car(new_cons) = popSTACK();
+        Cdr(new_cons) = STACK_1;
+        STACK_1 = new_cons;
+      } while (mconsp(STACK_0));
+      args = popSTACK();
+      /* reverse list STACK_0 and use as REST-parameter: */
+      nreverse(STACK_0);
+      /* argument-list finished. */
+      if (!nullp(args)) goto error_dotted;
+    }
    apply_cclosure_nokey:        /* jump to Closure without &KEY : */
     closure = *closure_; codevec = TheCclosure(closure)->clos_codevec;
    apply_cclosure_nokey_:
@@ -3996,10 +4016,8 @@ global maygc Values apply (object fun, uintC args_on_stack, object other_args)
       }
      #endif
       switch (Record_type(fdef)) {
-        case Rectype_Fsubr:
-          error_specialform(S(apply),fun);
-        case Rectype_Macro:
-          error_macro(S(apply),fun);
+        case Rectype_Fsubr: { error_specialform(S(apply),fun); }
+        case Rectype_Macro: { error_macro(S(apply),fun); }
         default: NOTREACHED;
       }
     } else
@@ -4193,15 +4211,15 @@ local maygc Values apply_subr (object fun, uintC args_on_stack, object args)
       if ((args_on_stack>0) || consp(args)) goto error_toomany;
       goto apply_subr_norest;
     unbound_optional_5: /* Still 5 optionals Arguments, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_4: /* Still 4 optional Arguments, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_3: /* Still 3 optional Arguments, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_2: /* Still 2 optional Arguments, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_1: /* Still 1 optionals Argument, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
       goto apply_subr_norest;
     case (uintW)subr_argtype_3_0_rest: /* SUBR with 3 required and &rest */
       REQ_ARG();
@@ -4241,9 +4259,9 @@ local maygc Values apply_subr (object fun, uintC args_on_stack, object args)
       if ((args_on_stack==0) && atomp(args)) goto unbound_optional_key_0;
       goto apply_subr_key;
     unbound_optional_key_2: /* Still 2 optional Arguments, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_key_1: /* Still 1 optional Argument, but args_on_stack=0 and atomp(args) */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_key_0: /* Before the Keywords is args_on_stack=0 and atomp(args) */
       {
         var uintC count;
@@ -4426,7 +4444,7 @@ nonreturning_function(local, error_closure_toofew, (object closure, object tail)
  and returns the values.
  apply_closure(fun,args_on_stack,other_args);
  > fun: function, a Closure
- > Argumente: args_on_stack arguments on STACK,
+ > Arguments: args_on_stack arguments on STACK,
               remaining argument-list in other_args
  < STACK: cleaned up (i.e. STACK is increased by args_on_stack)
  < mv_count/mv_space: values
@@ -4444,8 +4462,7 @@ local maygc Values apply_closure (object closure, uintC args_on_stack, object ar
     var gcv_object_t* rest_args_pointer; /* Pointer to the remaining arguments */
     var uintL argcount;         /* number of remaining arguments */
     check_SP(); check_STACK();
-    /* put argumente in STACK:
-     first a Dispatch for the most important cases: */
+    /* put arguments in STACK: first a Dispatch for the most important cases: */
     switch (TheCodevec(codevec)->ccv_signature) {
       /* Macro for a required-argument: */
       #define REQ_ARG()  \
@@ -4519,15 +4536,15 @@ local maygc Values apply_closure (object closure, uintC args_on_stack, object ar
         OPT_ARG(5);
         goto noch_4_opt_args;
       unbound_optional_5: /* Still 5 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_4: /* Still 4 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_3: /* Still 3 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_2: /* Still 2 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_1: /* Still 1 optional Argument, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
         if (!nullp(args)) goto error_dotted;
         goto apply_cclosure_nokey;
       case (uintB)cclos_argtype_4_0_rest: /* 4 required + &rest */
@@ -4589,13 +4606,13 @@ local maygc Values apply_closure (object closure, uintC args_on_stack, object ar
         OPT_ARG(key_4);
         goto noch_3_opt_args_key;
       unbound_optional_key_4: /* Still 4 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_3: /* Still 3 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_2: /* Still 2 optional Arguments, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_1: /* Still 1 optional Argument, but args_on_stack=0 and atomp(args) */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_0: /* Before the Keywords is args_on_stack=0 and atomp(args) */
         if (!nullp(args)) goto error_dotted;
         goto apply_cclosure_key_noargs;
@@ -4819,7 +4836,7 @@ local Values funcall_closure (object fun, uintC args_on_stack);
 /* UP: Applies a function to its arguments.
  funcall(function,argcount);
  > function: function
- > Argumente: argcount arguments on STACK
+ > Arguments: argcount arguments on STACK
  < STACK: cleaned up (i.e. STACK is increased by argcount)
  < mv_count/mv_space: values
  changes STACK, can trigger GC */
@@ -4845,10 +4862,8 @@ global maygc Values funcall (object fun, uintC args_on_stack)
       }
      #endif
       switch (Record_type(fdef)) {
-        case Rectype_Fsubr:
-          error_specialform(S(funcall),fun);
-        case Rectype_Macro:
-          error_macro(S(funcall),fun);
+        case Rectype_Fsubr: { error_specialform(S(funcall),fun); }
+        case Rectype_Macro: { error_macro(S(funcall),fun); }
         default: NOTREACHED;
       }
     } else
@@ -4969,16 +4984,16 @@ local maygc Values funcall_subr (object fun, uintC args_on_stack)
       else { pushSTACK(unbound); goto apply_subr_norest; }
     case (uintW)subr_argtype_0_2: /* SUBR with 2 optional arguments */
       switch (args_on_stack) {
-        case 0: pushSTACK(unbound);
-        case 1: pushSTACK(unbound);
+        case 0: { pushSTACK(unbound); }
+        case 1: { pushSTACK(unbound); }
         case 2: goto apply_subr_norest;
         default: goto error_toomany;
       }
     case (uintW)subr_argtype_1_2: /* SUBR with 1 required and 2 optional */
       switch (args_on_stack) {
         case 0: goto error_toofew;
-        case 1: pushSTACK(unbound);
-        case 2: pushSTACK(unbound);
+        case 1: { pushSTACK(unbound); }
+        case 2: { pushSTACK(unbound); }
         case 3: goto apply_subr_norest;
         default: goto error_toomany;
       }
@@ -4986,8 +5001,8 @@ local maygc Values funcall_subr (object fun, uintC args_on_stack)
       switch (args_on_stack) {
         case 0: goto error_toofew;
         case 1: goto error_toofew;
-        case 2: pushSTACK(unbound);
-        case 3: pushSTACK(unbound);
+        case 2: { pushSTACK(unbound); }
+        case 3: { pushSTACK(unbound); }
         case 4: goto apply_subr_norest;
         default: goto error_toomany;
       }
@@ -4996,25 +5011,25 @@ local maygc Values funcall_subr (object fun, uintC args_on_stack)
         case 0: goto error_toofew;
         case 1: goto error_toofew;
         case 2: goto error_toofew;
-        case 3: pushSTACK(unbound);
-        case 4: pushSTACK(unbound);
+        case 3: { pushSTACK(unbound); }
+        case 4: { pushSTACK(unbound); }
         case 5: goto apply_subr_norest;
         default: goto error_toomany;
       }
     case (uintW)subr_argtype_0_3: /* SUBR with 3 optional arguments */
       switch (args_on_stack) {
-        case 0: pushSTACK(unbound);
-        case 1: pushSTACK(unbound);
-        case 2: pushSTACK(unbound);
+        case 0: { pushSTACK(unbound); }
+        case 1: { pushSTACK(unbound); }
+        case 2: { pushSTACK(unbound); }
         case 3: goto apply_subr_norest;
         default: goto error_toomany;
       }
     case (uintW)subr_argtype_1_3: /* SUBR with 1 required and 3 optional */
       switch (args_on_stack) {
         case 0: goto error_toofew;
-        case 1: pushSTACK(unbound);
-        case 2: pushSTACK(unbound);
-        case 3: pushSTACK(unbound);
+        case 1: { pushSTACK(unbound); }
+        case 2: { pushSTACK(unbound); }
+        case 3: { pushSTACK(unbound); }
         case 4: goto apply_subr_norest;
         default: goto error_toomany;
       }
@@ -5022,28 +5037,28 @@ local maygc Values funcall_subr (object fun, uintC args_on_stack)
       switch (args_on_stack) {
         case 0: goto error_toofew;
         case 1: goto error_toofew;
-        case 2: pushSTACK(unbound);
-        case 3: pushSTACK(unbound);
-        case 4: pushSTACK(unbound);
+        case 2: { pushSTACK(unbound); }
+        case 3: { pushSTACK(unbound); }
+        case 4: { pushSTACK(unbound); }
         case 5: goto apply_subr_norest;
         default: goto error_toomany;
       }
     case (uintW)subr_argtype_0_4: /* SUBR with 4 optional arguments */
       switch (args_on_stack) {
-        case 0: pushSTACK(unbound);
-        case 1: pushSTACK(unbound);
-        case 2: pushSTACK(unbound);
-        case 3: pushSTACK(unbound);
+        case 0: { pushSTACK(unbound); }
+        case 1: { pushSTACK(unbound); }
+        case 2: { pushSTACK(unbound); }
+        case 3: { pushSTACK(unbound); }
         case 4: goto apply_subr_norest;
         default: goto error_toomany;
       }
     case (uintW)subr_argtype_0_5: /* SUBR with 5 optional arguments */
       switch (args_on_stack) {
-        case 0: pushSTACK(unbound);
-        case 1: pushSTACK(unbound);
-        case 2: pushSTACK(unbound);
-        case 3: pushSTACK(unbound);
-        case 4: pushSTACK(unbound);
+        case 0: { pushSTACK(unbound); }
+        case 1: { pushSTACK(unbound); }
+        case 2: { pushSTACK(unbound); }
+        case 3: { pushSTACK(unbound); }
+        case 4: { pushSTACK(unbound); }
         case 5: goto apply_subr_norest;
         default: goto error_toomany;
       }
@@ -5104,9 +5119,9 @@ local maygc Values funcall_subr (object fun, uintC args_on_stack)
         default: args_on_stack -= 3; goto apply_subr_key;
       }
     unbound_optional_key_2: /* Still 2 optional Arguments, but args_on_stack=0 */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_key_1: /* Still 1 optional Argument, but args_on_stack=0 */
-      pushSTACK(unbound);
+      { pushSTACK(unbound); }
     unbound_optional_key_0: /* Before the Keywords is args_on_stack=0 */
       {
         var uintC count;
@@ -5208,15 +5223,15 @@ local maygc Values funcall_subr (object fun, uintC args_on_stack)
     goto error_toofew;          /* too few Arguments */
   else
     goto error_toomany;         /* too many Arguments */
- error_toofew: error_subr_toofew(fun,NIL);
- error_toomany: error_subr_toomany(fun);
+ error_toofew: { error_subr_toofew(fun,NIL); }
+ error_toomany: { error_subr_toomany(fun); }
 }
 
 /* In FUNCALL: Applies a Closure to Arguments, cleans up STACK
  and returns the values.
  funcall_closure(fun,args_on_stack);
  > fun: function, a Closure
- > Argumente: args_on_stack Arguments on STACK
+ > Arguments: args_on_stack arguments on STACK
  < STACK: cleaned up (i.e. STACK is increased by args_on_stack)
  < mv_count/mv_space: values
  changes STACK, can trigger GC */
@@ -5280,87 +5295,87 @@ local maygc Values funcall_closure (object closure, uintC args_on_stack)
         else { pushSTACK(unbound); goto apply_cclosure_nokey; }
       case (uintB)cclos_argtype_0_2: /* 2 optional arguments */
         switch (args_on_stack) {
-          case 0: pushSTACK(unbound);
-          case 1: pushSTACK(unbound);
+          case 0: { pushSTACK(unbound); }
+          case 1: { pushSTACK(unbound); }
           case 2: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_1_2: /* 1 required and 2 optional */
         switch (args_on_stack) {
           case 0: goto error_toofew;
-          case 1: pushSTACK(unbound);
-          case 2: pushSTACK(unbound);
+          case 1: { pushSTACK(unbound); }
+          case 2: { pushSTACK(unbound); }
           case 3: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_2_2: /* 2 required and 2 optional */
         switch (args_on_stack) {
           case 0: case 1: goto error_toofew;
-          case 2: pushSTACK(unbound);
-          case 3: pushSTACK(unbound);
+          case 2: { pushSTACK(unbound); }
+          case 3: { pushSTACK(unbound); }
           case 4: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_3_2: /* 3 required and 2 optional */
         switch (args_on_stack) {
           case 0: case 1: case 2: goto error_toofew;
-          case 3: pushSTACK(unbound);
-          case 4: pushSTACK(unbound);
+          case 3: { pushSTACK(unbound); }
+          case 4: { pushSTACK(unbound); }
           case 5: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_0_3: /* 3 optional arguments */
         switch (args_on_stack) {
-          case 0: pushSTACK(unbound);
-          case 1: pushSTACK(unbound);
-          case 2: pushSTACK(unbound);
+          case 0: { pushSTACK(unbound); }
+          case 1: { pushSTACK(unbound); }
+          case 2: { pushSTACK(unbound); }
           case 3: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_1_3: /* 1 required and 3 optional */
         switch (args_on_stack) {
           case 0: goto error_toofew;
-          case 1: pushSTACK(unbound);
-          case 2: pushSTACK(unbound);
-          case 3: pushSTACK(unbound);
+          case 1: { pushSTACK(unbound); }
+          case 2: { pushSTACK(unbound); }
+          case 3: { pushSTACK(unbound); }
           case 4: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_2_3: /* 2 required and 3 optional */
         switch (args_on_stack) {
           case 0: case 1: goto error_toofew;
-          case 2: pushSTACK(unbound);
-          case 3: pushSTACK(unbound);
-          case 4: pushSTACK(unbound);
+          case 2: { pushSTACK(unbound); }
+          case 3: { pushSTACK(unbound); }
+          case 4: { pushSTACK(unbound); }
           case 5: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_0_4: /* 4 optional arguments */
         switch (args_on_stack) {
-          case 0: pushSTACK(unbound);
-          case 1: pushSTACK(unbound);
-          case 2: pushSTACK(unbound);
-          case 3: pushSTACK(unbound);
+          case 0: { pushSTACK(unbound); }
+          case 1: { pushSTACK(unbound); }
+          case 2: { pushSTACK(unbound); }
+          case 3: { pushSTACK(unbound); }
           case 4: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_1_4: /* 1 required and 4 optional */
         switch (args_on_stack) {
           case 0: goto error_toofew;
-          case 1: pushSTACK(unbound);
-          case 2: pushSTACK(unbound);
-          case 3: pushSTACK(unbound);
-          case 4: pushSTACK(unbound);
+          case 1: { pushSTACK(unbound); }
+          case 2: { pushSTACK(unbound); }
+          case 3: { pushSTACK(unbound); }
+          case 4: { pushSTACK(unbound); }
           case 5: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
       case (uintB)cclos_argtype_0_5: /* 5 optional arguments */
         switch (args_on_stack) {
-          case 0: pushSTACK(unbound);
-          case 1: pushSTACK(unbound);
-          case 2: pushSTACK(unbound);
-          case 3: pushSTACK(unbound);
-          case 4: pushSTACK(unbound);
+          case 0: { pushSTACK(unbound); }
+          case 1: { pushSTACK(unbound); }
+          case 2: { pushSTACK(unbound); }
+          case 3: { pushSTACK(unbound); }
+          case 4: { pushSTACK(unbound); }
           case 5: goto apply_cclosure_nokey;
           default: goto error_toomany;
         }
@@ -5484,13 +5499,13 @@ local maygc Values funcall_closure (object closure, uintC args_on_stack)
           default: args_on_stack -= 4; goto apply_cclosure_key_withargs;
         }
       unbound_optional_key_4: /* Still 4 optionals, but args_on_stack=0 */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_3: /* Still 3 optionals, but args_on_stack=0 */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_2: /* Still 2 optionals, but args_on_stack=0 */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_1: /* Still 1 optional, but args_on_stack=0 */
-        pushSTACK(unbound);
+        { pushSTACK(unbound); }
       unbound_optional_key_0: /* Before the Keywords is args_on_stack=0 */
         goto apply_cclosure_key_noargs;
       case (uintB)cclos_argtype_default:
@@ -5587,7 +5602,7 @@ local maygc Values funcall_closure (object closure, uintC args_on_stack)
    apply_cclosure_rest_nokey:
     /* Closure with only REST, without KEY:
      still must cons args_on_stack arguments from stack Stack: */
-    pushSTACK(NIL);
+    { pushSTACK(NIL); }
     if (args_on_stack > 0) {
       pushSTACK(closure);       /* Closure must be saved */
       dotimesC(args_on_stack,args_on_stack, {
@@ -5609,8 +5624,8 @@ local maygc Values funcall_closure (object closure, uintC args_on_stack)
       goto error_toofew;      /* too few arguments */
     else
       goto error_toomany;     /* too many arguments */
-   error_toofew: error_closure_toofew(closure,NIL);
-   error_toomany: error_closure_toomany(closure);
+   error_toofew: { error_closure_toofew(closure,NIL); }
+   error_toomany: { error_closure_toomany(closure); }
   } else {
     /* closure is an interpreted Closure */
     var gcv_object_t* args_pointer = args_end_pointer STACKop args_on_stack;
@@ -5635,7 +5650,7 @@ local maygc Values funcall_closure (object closure, uintC args_on_stack)
    LR(x,f) references label with number x forwards
    LR(x,b) references label with number x backwards
    The scope of the labels is only one assembler-statement. */
-  #if defined(I80386) && !defined(UNIX_NEXTSTEP)
+  #if defined(I80386)
     #ifdef ASM_UNDERSCORE
       #define LD(nr)  "LASM%=X" STRING(nr)
       #define LR(nr,fb)  "LASM%=X" STRING(nr)
@@ -6200,25 +6215,23 @@ local /*maygc*/ Values interpret_bytecode_ (object closure_in, Sbvector codeptr,
         }
 
     /* ------------------- (1) Constants ----------------------- */
-    CASE cod_nil:               /* (NIL) */
-      code_nil:
+    CASE cod_nil: code_nil: {   /* (NIL) */
       VALUES1(NIL);
-      goto next_byte;
-    CASE cod_nil_push:          /* (NIL&PUSH) */
+    } goto next_byte;
+    CASE cod_nil_push: {        /* (NIL&PUSH) */
       pushSTACK(NIL);
-      goto next_byte;
+    } goto next_byte;
     CASE cod_push_nil: {        /* (PUSH-NIL n) */
       var uintC n;
       U_operand(n);
       dotimesC(n,n, { pushSTACK(NIL); } );
     } goto next_byte;
-    CASE cod_t:                 /* (T) */
-      code_t:
+    CASE cod_t: code_t: {       /* (T) */
       VALUES1(T);
-      goto next_byte;
-    CASE cod_t_push:            /* (T&PUSH) */
+    } goto next_byte;
+    CASE cod_t_push: {          /* (T&PUSH) */
       pushSTACK(T);
-      goto next_byte;
+    } goto next_byte;
     CASE cod_const: {           /* (CONST n) */
       var uintL n;
       U_operand(n);
@@ -6371,9 +6384,7 @@ local /*maygc*/ Values interpret_bytecode_ (object closure_in, Sbvector codeptr,
       var object symbol = TheCclosure(closure)->clos_consts[n];
       /* The Compiler has already checked, that it's a Symbol. */
       if (!boundp(Symbol_value(symbol))) {
-        pushSTACK(symbol);      /* CELL-ERROR slot NAME */
-        pushSTACK(symbol); pushSTACK(Closure_name(closure));
-        error(unbound_variable,GETTEXT("~S: symbol ~S has no value"));
+        pushSTACK(symbol); check_variable_value_replacement(&STACK_0,false);
       }
       VALUES1(Symbol_value(symbol));
     } goto next_byte;
@@ -6383,9 +6394,7 @@ local /*maygc*/ Values interpret_bytecode_ (object closure_in, Sbvector codeptr,
       var object symbol = TheCclosure(closure)->clos_consts[n];
       /* The Compiler has already checked, that it's a Symbol. */
       if (!boundp(Symbol_value(symbol))) {
-        pushSTACK(symbol);    /* CELL-ERROR slot NAME */
-        pushSTACK(symbol); pushSTACK(Closure_name(closure));
-        error(unbound_variable,GETTEXT("~S: symbol ~S has no value"));
+        pushSTACK(symbol); check_variable_value_replacement(&STACK_0,false);
       }
       pushSTACK(Symbol_value(symbol));
     } goto next_byte;
@@ -7552,11 +7561,10 @@ local /*maygc*/ Values interpret_bytecode_ (object closure_in, Sbvector codeptr,
         if (!(posfixnump(index)
               && ((i = posfixnum_to_V(index)) < Svector_length(vec))))
           goto svref_not_an_index;
-        value1 = TheSvector(vec)->data[i] = popSTACK(); /* put in new element */
-        mv_count = 1;
+        VALUES1(TheSvector(vec)->data[i] = popSTACK()); /* put in new element */
     } goto next_byte;
     svref_not_a_svector:         /* Non-Simple-Vector in STACK_0 */
-      error_no_svector(S(svref),STACK_0);
+      { error_no_svector(S(svref),STACK_0); }
     svref_not_an_index:    /* unsuitable Index in index, for Vector vec */
       pushSTACK(vec);
       pushSTACK(index);
@@ -8176,22 +8184,25 @@ local /*maygc*/ Values interpret_bytecode_ (object closure_in, Sbvector codeptr,
     #undef CASE
   }
  #if DEBUG_BYTECODE
- error_byteptr:
-  pushSTACK(fixnum(byteptr_max));
-  pushSTACK(fixnum(byteptr_min));
-  pushSTACK(fixnum(byteptr - codeptr->data));
-  pushSTACK(sfixnum(byteptr_bad_jump));
-  pushSTACK(closure);
-  error(error_condition,GETTEXT("~S: jump by ~S takes ~S outside [~S;~S]"));
+ error_byteptr: {
+    pushSTACK(fixnum(byteptr_max));
+    pushSTACK(fixnum(byteptr_min));
+    pushSTACK(fixnum(byteptr - codeptr->data));
+    pushSTACK(sfixnum(byteptr_bad_jump));
+    pushSTACK(closure);
+    error(error_condition,GETTEXT("~S: jump by ~S takes ~S outside [~S;~S]"));
+  }
  #endif
- error_toomany_values:
-  pushSTACK(closure);
-  error(error_condition,GETTEXT("~S: too many return values"));
+ error_toomany_values: {
+    pushSTACK(closure);
+    error(error_condition,GETTEXT("~S: too many return values"));
+  }
  #if STACKCHECKC
- error_STACK_putt:
-  pushSTACK(fixnum(byteptr - codeptr->data - byteptr_min)); /* PC */
-  pushSTACK(closure);                       /* FUNC */
-  error(serious_condition,GETTEXT("Corrupted STACK in ~S at byte ~S"));
+ error_STACK_putt: {
+    pushSTACK(fixnum(byteptr - codeptr->data - byteptr_min)); /* PC */
+    pushSTACK(closure);                       /* FUNC */
+    error(serious_condition,GETTEXT("Corrupted STACK in ~S at byte ~S"));
+  }
  #endif
  finished:
   #undef FREE_JMPBUF_on_SP
@@ -8238,6 +8249,7 @@ global maygc void init_cclosures (void) {
 
 #if defined(USE_JITC)
  #if defined(lightning)
+  #undef unused
   #include "lightning.c"
  #else
   #error USE_JITC: what is your JITC flavor?

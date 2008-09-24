@@ -166,8 +166,13 @@ local void gc_mark (object obj)
     goto down; /* and descent */                                        \
   }}
 #if defined(USE_JITC)
- #define down_cclosure() \
-  if (cclosurep(curr) && cclosure_jitc_p(curr)) gc_mark_jitc_object(TheFpointer(cclosure_jitc(curr))->fp_pointer)
+ #define down_cclosure()  if (cclosurep(curr) && cclosure_jitc_p(curr)) { \
+   object jitc = cclosure_jitc(curr);                                   \
+   if (fpointerp(jitc)) {                                               \
+     if (gc_drop_jitc) cclosure_jitc(curr) = NIL;                       \
+     else gc_mark_jitc_object(TheFpointer(jitc)->fp_pointer);           \
+   }                                                                    \
+ }
 #else
  #define down_cclosure()
 #endif
@@ -211,7 +216,7 @@ local void gc_mark (object obj)
       down_pair();
     case_symbol: /* Symbol */
       down_varobject(TheSymbol,symbol_objects_offset,
-                     sizeof(symbol_)-sizeof(gcv_object_t));
+                     symbol_length*sizeof(gcv_object_t));
     case_sstring: /* simple-string */
       if (sstring_reallocatedp(TheSstring(curr))) {
         down_sistring();

@@ -84,32 +84,16 @@ LISPSPECFORM(function, 1,1,nobody)
   skipSTACK(2);
 }
 
-/* error-message, if a symbol has no value.
- > symbol: symbol
- < value1: bound value
- can trigger GC */
-local maygc void check_global_symbol_value (object symbol) {
-  value1 = Symbol_value(symbol);
-  if (!boundp(value1)) {
-    do {
-      pushSTACK(symbol); /* save */
-      pushSTACK(symbol); /* PLACE */
-      pushSTACK(symbol); /* CELL-ERROR Slot NAME */
-      pushSTACK(symbol);
-      pushSTACK(TheSubr(subr_self)->name);
-      check_value(unbound_variable,GETTEXT("~S: ~S has no dynamic value"));
-      symbol = popSTACK(); /* restore */
-    } while (!boundp(value1));
-    if (!nullp(value2)) /* STORE-VALUE */
-      Symbol_value(symbol) = value1;
-  }
-}
-
 LISPFUNNR(symbol_value,1)
 { /* (SYMBOL-VALUE symbol), CLTL p. 90 */
-  var object symbol = check_symbol(popSTACK());
-  check_global_symbol_value(symbol); /* value1 <- Symbol_value */
-  mv_count=1;
+  STACK_0 = check_symbol(STACK_0);
+  value1 = Symbol_value(STACK_0);
+  if (!boundp(value1)) {
+    check_variable_value_replacement(&STACK_0,true); /* sets value1 */
+    if (eq(T,value2)) /* STORE-VALUE */
+      Symbol_value(STACK_0) = value1;
+  }
+  skipSTACK(1); mv_count = 1;
 }
 
 LISPFUNNR(symbol_function,1)
@@ -184,7 +168,7 @@ local maygc bool check_setq_body (object caller) {
     STACK_0 = Cdr(STACK_0);
     if (atomp(STACK_0)) {
       if (!nullp(STACK_0))
-        goto error_dotted;
+        error_dotted_form(STACK_1,TheFsubr(subr_self)->name);
       /* STACK_0 == SOURCE-PROGRAM-ERROR slot DETAIL */
       pushSTACK(STACK_1); pushSTACK(TheFsubr(subr_self)->name);
       error(source_program_error,GETTEXT("~S: odd number of arguments: ~S"));
@@ -192,12 +176,8 @@ local maygc bool check_setq_body (object caller) {
     STACK_0 = Cdr(STACK_0);
   }
   /* body is finished. */
-  if (!nullp(STACK_0)) {
-   error_dotted: /* The whole body is still in STACK_0. */
-    /* STACK_0 == SOURCE-PROGRAM-ERROR slot DETAIL */
-    pushSTACK(STACK_1); pushSTACK(TheFsubr(subr_self)->name);
-    error(source_program_error,GETTEXT("dotted list given to ~S : ~S"));
-  }
+  if (!nullp(STACK_0))
+    error_dotted_form(STACK_1,TheFsubr(subr_self)->name);
   skipSTACK(1); /* drop body */
   return false;
 }
@@ -292,7 +272,7 @@ LISPFUNN(fmakunbound,1)
       error(error_condition,GETTEXT("~S: the special operator definition of ~S must not be removed"));
     }
   }
-  Symbol_function(symbol) = unbound;
+  { Symbol_function(symbol) = unbound; }
  undef:
   VALUES1(funname);
 }
@@ -430,10 +410,10 @@ global gcv_object_t* specdecled_ (object symbol, gcv_object_t* spec_pointer,
       if (eq(NEXT(spec_pointer),Fixnum_0))
         return &Before(spec_pointer);
     } else {
-      NEXT(spec_pointer);
+      (void)NEXT(spec_pointer);
     }
    #else
-    if (eq(NEXT(spec_pointer),symbol))
+    if (eq(NEXT(spec_pointer),symbol_without_flags(symbol)))
       return &Before(spec_pointer);
    #endif
   } while (--spec_count);
@@ -453,7 +433,7 @@ global gcv_object_t* specdecled_ (object symbol, gcv_object_t* spec_pointer,
  < uintC bind_count: number of "genuine" bindings.
  < gcv_object_t* spec_ptr: pointer to the first SPECDECL binding.
  < uintC spec_count: number of SPECDECL bindings.
- changes STACK
+ changes STACK (STACK_0<-value1=({form}) + bindings requiring 2 unwind calls)
  can trigger GC */
 local /*maygc*/ void make_variable_frame
 (object caller, object varspecs, gcv_object_t** bind_ptr_, uintC* bind_count_,
@@ -637,8 +617,8 @@ local void activate_bindings (gcv_object_t* frame_pointer, uintC count) {
     if (as_oint(*markptr) & wbit(dynam_bit_o)) { /* binding dynamic? */
       var object symbol = *(markptr STACKop varframe_binding_sym); /* variable */
       var object newval = *(markptr STACKop varframe_binding_value); /* new value */
-      *(markptr STACKop varframe_binding_value) = TheSymbolflagged(symbol)->symvalue; /* save old value in frame */
-      TheSymbolflagged(symbol)->symvalue = newval; /* new value */
+      *(markptr STACKop varframe_binding_value) = Symbolflagged_value(symbol); /* save old value in frame */
+      Symbolflagged_value(symbol) = newval; /* new value */
     }
     *markptr = SET_BIT(*markptr,active_bit_o); /* activate binding */
   } while (--count);
@@ -687,7 +667,7 @@ LISPSPECFORM(let, 1,0,body)
   }
 }
 
-LISPSPECFORM(letstern, 1,0,body)
+LISPSPECFORM(letstar, 1,0,body)
 { /* (LET* ({varspec}) {decl} {form}), CLTL p. 111 */
   /* separate {decl} {form} : */
   if (parse_doc_decl(STACK_0,false)) { /* declaration (COMPILE) ? */
@@ -698,7 +678,7 @@ LISPSPECFORM(letstern, 1,0,body)
     /* build variable binding frame, extend VAR_ENV : */
     var gcv_object_t *bind_ptr, *spec_ptr;
     var uintC bind_count, spec_count;
-    make_variable_frame(S(letstern),popSTACK(),&bind_ptr,&bind_count,
+    make_variable_frame(S(letstar),popSTACK(),&bind_ptr,&bind_count,
                         &spec_ptr,&spec_count);
     /* Then, evaluate the initialization forms and activate the bindings */
     if (bind_count > 0) {
@@ -712,8 +692,8 @@ LISPSPECFORM(letstern, 1,0,body)
         var object newval = (!boundp(init) ? NIL : (eval(init),value1)); /* evaluate, NIL as default */
         if (as_oint(*markptr) & wbit(dynam_bit_o)) { /* binding dynamic? */
           var object symbol = *(markptr STACKop varframe_binding_sym); /* variable */
-          *initptr = TheSymbolflagged(symbol)->symvalue; /* save old value in frame */
-          TheSymbolflagged(symbol)->symvalue = newval; /* new value */
+          *initptr = Symbolflagged_value(symbol); /* save old value in frame */
+          Symbolflagged_value(symbol) = newval; /* new value */
           activate_specdecl(symbol,spec_ptr,spec_count);
         } else {
           *initptr = newval; /* new value into the frame */
@@ -730,6 +710,25 @@ LISPSPECFORM(letstern, 1,0,body)
   }
 }
 
+/* call make_variable_frame + activate_bindings + activate_specdecls
+ Analyzes the variables and declarations, builds up a variable binding-
+ frame and extends VENV and poss. also DENV by a frame.
+ make_vframe_activate(void)
+ call it after parse_doc_decl, then the inputs are correct:
+ > object value2: list of declaration-specifiers
+ > object value1: list ({form}) of forms
+ changes STACK (STACK_0<-value1=({form}) + 2 bindings requiring 2 unwind calls)
+ can trigger GC */
+local /*maygc*/ void make_vframe_activate (void) {
+  GCTRIGGER2(value1,value2);
+  var gcv_object_t *bind_ptr, *spec_ptr;
+  var uintC bind_count, spec_count;
+  make_variable_frame(TheFsubr(subr_self)->name,NIL,&bind_ptr,&bind_count,
+                      &spec_ptr,&spec_count);
+  if (bind_count) activate_bindings(bind_ptr,bind_count);
+  if (spec_count) activate_specdecls(spec_ptr,spec_count);
+}
+
 LISPSPECFORM(locally, 0,0,body)
 { /* (LOCALLY {decl} {form}), CLTL2 p. 221 */
   /* separate {decl} {form} : */
@@ -738,14 +737,8 @@ LISPSPECFORM(locally, 0,0,body)
   if (to_compile) { /* declaration (COMPILE) ? */
     /* yes -> compile form: */
     return_Values compile_eval_form();
-  } else {
-    /* build variable binding frame, extend VAR_ENV : */
-    var gcv_object_t *bind_ptr, *spec_ptr;
-    var uintC bind_count, spec_count;
-    make_variable_frame(S(locally),NIL,&bind_ptr,&bind_count,
-                        &spec_ptr,&spec_count);
-    if (bind_count) activate_bindings(bind_ptr,bind_count);
-    if (spec_count) activate_specdecls(spec_ptr,spec_count);
+  } else { /* build variable binding frame, extend VAR_ENV : */
+    make_vframe_activate();
     /* interpret body: */
     implicit_progn(popSTACK(),NIL);
     /* unwind frames: */
@@ -850,26 +843,21 @@ nonreturning_function(local, error_funspec, (object caller, object obj)) {
   error(source_program_error,GETTEXT("~S: ~S is not a function specification"));
 }
 
-/* skip all declarations from the body:
- descructively modifies BODY to remove (DECLARE ...)
- statements from its beginning */
-local void skip_declarations (object* body) {
-  while (consp(*body) && consp(Car(*body)) && eq(S(declare),Car(Car(*body))))
-    *body = Cdr(*body);
-}
-
 /* UP: Finishes a FLET/MACROLET.
- finish_flet(top_of_frame,body);
+ finish_flet(top_of_frame,body,ignore_declarations);
  > stack layout: [top_of_frame] def1 name1 ... defn namen [STACK]
  > top_of_frame: pointer to frame
  > body: list of forms
+ > accept_declarations: flag: if true, declarations are respected
+     (for FLET & MACROLET), otherwise C_declare barfs (for FUNCTION-MACRO-LET)
  < mv_count/mv_space: values
  can trigger GC */
-local maygc Values finish_flet (gcv_object_t* top_of_frame, object body) {
+local maygc Values finish_flet (gcv_object_t* top_of_frame, object body,
+                                bool accept_declarations) {
   {
     var uintL bindcount = /* number of bindings */
       STACK_item_count(STACK,top_of_frame) / 2;
-      pushSTACK(aktenv.fun_env); /* current FUN_ENV as NEXT_ENV */
+    pushSTACK(aktenv.fun_env); /* current FUN_ENV as NEXT_ENV */
     pushSTACK(fake_gcv_object(bindcount));
     finish_frame(FUN);
   }
@@ -885,9 +873,17 @@ local maygc Values finish_flet (gcv_object_t* top_of_frame, object body) {
     aktenv.fun_env = make_framepointer(top_of_frame);
   }
   /* allow declarations, as per ANSI CL */
-  skip_declarations(&body);
+  if (accept_declarations) {
+    parse_doc_decl(body,false); /* ignore to_compile */
+    make_vframe_activate();
+    body = popSTACK();
+  }
   /* execute forms: */
   implicit_progn(body,NIL);
+  if (accept_declarations) {
+    unwind(); /* unwind VENV-binding frame */
+    unwind(); /* unwind variable binding frame */
+  }
   unwind(); /* unwind FENV binding frame */
   unwind(); /* unwind function binding frame */
 }
@@ -926,7 +922,7 @@ LISPSPECFORM(flet, 1,0,body)
     pushSTACK(fun); /* as "value" the closure */
     pushSTACK(name); /* name, binding is automatically active */
   }
-  return_Values finish_flet(top_of_frame,body);
+  return_Values finish_flet(top_of_frame,body,true);
 }
 
 LISPSPECFORM(labels, 1,0,body)
@@ -998,11 +994,13 @@ LISPSPECFORM(labels, 1,0,body)
     }
   }
   skipSTACK(1); /* forget vector */
-  body = popSTACK();
   /* allow declarations, as per ANSI CL */
-  skip_declarations(&body);
+  parse_doc_decl(popSTACK(),false); /* ignore to_compile */
+  make_vframe_activate();
   /* execute forms: */
-  implicit_progn(body,NIL);
+  implicit_progn(popSTACK(),NIL);
+  unwind(); /* unwind VENV-binding frame */
+  unwind(); /* unwind variable binding frame */
   unwind(); /* unwind FENV binding frame */
 }
 
@@ -1060,7 +1058,7 @@ LISPSPECFORM(macrolet, 1,0,body)
     pushSTACK(value1); /* as "value" the cons with the expander */
     pushSTACK(name); /* name, binding is automatically active */
   }
-  return_Values finish_flet(top_of_frame,body);
+  return_Values finish_flet(top_of_frame,body,true);
 }
 
 LISPSPECFORM(function_macro_let, 1,0,body)
@@ -1118,7 +1116,7 @@ LISPSPECFORM(function_macro_let, 1,0,body)
     pushSTACK(value1); /* as "value" the FunctionMacro */
     pushSTACK(name); /* name, binding is automatically active */
   }
-  return_Values finish_flet(top_of_frame,body);
+  return_Values finish_flet(top_of_frame,body,false);
 }
 
 LISPSPECFORM(symbol_macrolet, 1,0,body)
@@ -1330,13 +1328,13 @@ LISPSPECFORM(return_from, 1,1,nobody)
       }
     env = Cdr(env);
   }
-  /* env is done. */
-  pushSTACK(name);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(name); pushSTACK(S(return_from));
-  error(source_program_error,
-        GETTEXT("~S: no block named ~S is currently visible"));
-  /* found block-frame: env */
- found:
+  { /* env is done. */
+    pushSTACK(name);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(name); pushSTACK(S(return_from));
+    error(source_program_error,
+          GETTEXT("~S: no block named ~S is currently visible"));
+  }
+ found: /* found block-frame: env */
   FRAME = uTheFramepointer(env); /* pointer to that frame */
   /* produce values, with which the block will be left: */
   var object result = popSTACK();
@@ -1344,7 +1342,7 @@ LISPSPECFORM(return_from, 1,1,nobody)
   if (boundp(result)) { /* result supplied? */
     eval(result);
   } else {
-      VALUES1(NIL);
+    VALUES1(NIL);
   }
   /* jump to the found block-frame and unwind it: */
   unwind_upto(FRAME);
@@ -1601,7 +1599,7 @@ LISPSPECFORM(tagbody, 0,0,body)
     pushSTACK(aktenv.go_env); /* current GO_ENV as NEXT_ENV */
     finish_entry_frame(ITAGBODY,returner,, goto go_entry; );
     /* extend GO_ENV: */
-    aktenv.go_env = make_framepointer(STACK);
+    { aktenv.go_env = make_framepointer(STACK); }
     if (false) {
      go_entry: /* we jump to this label, if this frame has caught a GO. */
       body = value1; /* the formlist is passed as value1. */
@@ -1681,14 +1679,14 @@ LISPSPECFORM(go, 1,0,nobody)
     } while (--count);
     env = Cdr(env);
   }
-  /* env is finished. */
-  pushSTACK(tag);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
-  pushSTACK(tag); pushSTACK(S(go));
-  error(source_program_error,
-        GETTEXT("~S: no tag named ~S is currently visible"));
-  /* tagbody-frame found. FRAME is pointing to it (without typeinfo),
-     value1 is the liste of the forms to be executed. */
- found:
+  { /* env is finished. */
+    pushSTACK(tag);  /* SOURCE-PROGRAM-ERROR slot DETAIL */
+    pushSTACK(tag); pushSTACK(S(go));
+    error(source_program_error,
+          GETTEXT("~S: no tag named ~S is currently visible"));
+  }
+ found: /* tagbody-frame found. FRAME is pointing to it (without typeinfo),
+           value1 is the liste of the forms to be executed. */
   mv_count=1; /* formlist value1 is passed */
   /* jump to the found tagbody-frame and continue there: */
   unwind_upto(FRAME);
@@ -1784,8 +1782,8 @@ LISPSPECFORM(multiple_value_bind, 2,0,body)
      {var gcv_object_t* markptr = &Before(frame_pointer);               \
        if (as_oint(*markptr) & wbit(dynam_bit_o)) { /* dynamic binding: */ \
         var object sym = *(markptr STACKop varframe_binding_sym); /* var */ \
-        *valptr = TheSymbolflagged(sym)->symvalue; /* old val into the frame */ \
-        TheSymbolflagged(sym)->symvalue = (value); /* new value into the value cell */ \
+        *valptr = Symbolflagged_value(sym); /* old val into the frame */ \
+        Symbolflagged_value(sym) = (value); /* new value into the value cell */ \
         activate_specdecl(sym,spec_ptr,spec_count);                     \
       } else /* static binding : */                                     \
         *valptr = (value); /* new value into the frame */               \
@@ -2097,6 +2095,10 @@ LISPFUNN(proclaim,1)
       if (!keywordp(symbol))
         clear_const_flag(TheSymbol(symbol));
       set_special_flag(TheSymbol(symbol));
+      #if defined(MULTITHREAD)
+       /* MT: add to the threads (unbound) */
+       add_per_thread_special_var(symbol);
+      #endif
     }
   } else if (eq(decltype,S(notspecial))) { /* NOTSPECIAL */
     while (!endp( STACK_0/*declspec*/ = Cdr(STACK_0/*declspec*/) )) {
@@ -2106,7 +2108,9 @@ LISPFUNN(proclaim,1)
     }
   } else if (eq(decltype,S(declaration))) { /* DECLARATION */
     while (!endp( STACK_0/*declspec*/ = Cdr(STACK_0/*declspec*/) )) {
-      var object symbol = check_symbol(Car(STACK_0/*declspec*/));
+      pushSTACK(Car(STACK_0/*declspec*/)); pushSTACK(TheSubr(subr_self)->name);
+      funcall(S(check_not_type),2);
+      var object symbol = value1;
       /* (PUSHNEW symbol (cdr declaration-types)) : */
       if (nullp(memq(symbol,Cdr(O(declaration_types))))) {
         pushSTACK(symbol);

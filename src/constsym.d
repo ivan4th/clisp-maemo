@@ -13,6 +13,12 @@
  > package: home-package of the symbol, either lisp or system or keyword.
  >          it is exported automatically from package lisp. */
 
+#if defined(MULTITHREAD)
+  #define SYM_TLS_INDEX_INIT SYMBOL_TLS_INDEX_NONE
+#else
+  #define SYM_TLS_INDEX_INIT
+#endif
+
 /* expander for the declaration of the symbol table: */
 #define LISPSYM_A(name,printname,package)       \
   symbol_ S_##name;
@@ -21,20 +27,20 @@
 #ifdef TYPECODES
   #ifdef DEBUG_GCSAFETY
     #define LISPSYM_B(name,printname,package)  \
-      { S(name), unbound, unbound, unbound, NIL, NIL, NIL, },
+      { S(name), unbound, unbound, unbound, NIL, NIL, NIL, SYM_TLS_INDEX_INIT},
   #else
     #define LISPSYM_B(name,printname,package)  \
-      { {S(name)}, unbound, unbound, unbound, NIL, NIL, NIL, },
+      { {S(name)}, unbound, unbound, unbound, NIL, NIL, NIL, SYM_TLS_INDEX_INIT},
   #endif
 #else
   #if defined(LINUX_NOEXEC_HEAPCODES) && 0
     #define LISPSYM_B(name,printname,package)  \
       { S(name), xrecord_tfl(Rectype_Symbol,0,symbol_length,0), \
-        unbound, unbound, unbound, NIL, NIL, NIL, unbound, },
+        unbound, unbound, unbound, NIL, NIL, NIL, unbound, SYM_TLS_INDEX_INIT},
   #else
     #define LISPSYM_B(name,printname,package)  \
       { S(name), xrecord_tfl(Rectype_Symbol,0,symbol_length,0), \
-        unbound, unbound, unbound, NIL, NIL, NIL, },
+        unbound, unbound, unbound, NIL, NIL, NIL, SYM_TLS_INDEX_INIT},
   #endif
 #endif
 #define LISPSYM_C(name,printname,package)  printname,
@@ -60,7 +66,7 @@ LISPSYM(progn,"PROGN",lisp)
 LISPSYM(prog1,"PROG1",lisp)
 LISPSYM(prog2,"PROG2",lisp)
 LISPSYM(let,"LET",lisp)
-LISPSYM(letstern,"LET*",lisp)
+LISPSYM(letstar,"LET*",lisp)
 LISPSYM(locally,"LOCALLY",lisp)
 LISPSYM(compiler_let,"COMPILER-LET",ext)
 LISPSYM(progv,"PROGV",lisp)
@@ -656,11 +662,14 @@ LISPSYM(absolute_pathname,"ABSOLUTE-PATHNAME",ext)
 LISPSYM(namestring,"NAMESTRING",lisp)
 LISPSYM(truename,"TRUENAME",lisp)
 LISPSYM(probe_file,"PROBE-FILE",lisp)
+LISPSYM(probe_pathname,"PROBE-PATHNAME",ext)
 LISPSYM(probe_directory,"PROBE-DIRECTORY",ext)
 LISPSYM(delete_file,"DELETE-FILE",lisp)
 LISPSYM(rename_file,"RENAME-FILE",lisp)
 LISPSYM(file_error,"FILE-ERROR",lisp)
 LISPSYM(open,"OPEN",lisp)
+LISPSYM(reopen_open_file,"*REOPEN-OPEN-FILE*",custom)
+LISPSYM(close,"CLOSE",lisp)
 LISPSYM(directory,"DIRECTORY",lisp)
 LISPSYM(cd,"CD",ext)
 LISPSYM(make_directory,"MAKE-DIRECTORY",ext)
@@ -1110,6 +1119,7 @@ LISPSYM(ftruncate,"FTRUNCATE",lisp)
 LISPSYM(fround,"FROUND",lisp)
 LISPSYM(decode_float,"DECODE-FLOAT",lisp)
 LISPSYM(scale_float,"SCALE-FLOAT",lisp)
+LISPSYM(float_scale_exponent,"FLOAT-SCALE-EXPONENT",system)
 LISPSYM(float_radix,"FLOAT-RADIX",lisp)
 LISPSYM(float_sign,"FLOAT-SIGN",lisp)
 LISPSYM(float_digits,"FLOAT-DIGITS",lisp)
@@ -1183,6 +1193,9 @@ LISPSYM(foreign_call_out,"FOREIGN-CALL-OUT",ffi)
 LISPSYM(open_foreign_library,"OPEN-FOREIGN-LIBRARY",ffi)
 LISPSYM(close_foreign_library,"CLOSE-FOREIGN-LIBRARY",ffi)
 #endif  /* WIN32_NATIVE || HAVE_DLOPEN */
+#if defined(HAVE_DLADDR)
+LISPSYM(foreign_pointer_info,"FOREIGN-POINTER-INFO",ffi)
+#endif
 #endif  /* DYNAMIC_FFI */
 /* ---------- ZTHREAD ---------- */
 #ifdef MULTITHREAD
@@ -1415,7 +1428,7 @@ LISPSYM(Kexternal,"EXTERNAL",keyword) /* INTERN result in PACKAGE */
 LISPSYM(Kinherited,"INHERITED",keyword) /* INTERN result in PACKAGE */
 LISPSYM(do_symbols,"DO-SYMBOLS",lisp) /* error reporter in PACKAGE */
 LISPSYM(do_external_symbols,"DO-EXTERNAL-SYMBOLS",lisp) /* error reporter in PACKAGE */
-LISPSYM(packagestern,"*PACKAGE*",lisp) /* variable in PACKAGE */
+LISPSYM(packagestar,"*PACKAGE*",lisp) /* variable in PACKAGE */
 LISPSYM(internal_time_units_per_second,"INTERNAL-TIME-UNITS-PER-SECOND",lisp) /* constant in TIME */
 LISPSYM(encode_universal_time,"ENCODE-UNIVERSAL-TIME",lisp) /* function in TIME */
 LISPSYM(use_clcs,"*USE-CLCS*",system) /* variable in ERROR */
@@ -1528,6 +1541,7 @@ LISPSYM(trace_output,"*TRACE-OUTPUT*",lisp) /* variable in STREAM */
 LISPSYM(stream_element_type,"STREAM-ELEMENT-TYPE",lisp) /* function in STREAM */
 LISPSYM(lastchar,"$LASTCHAR",system) /* slotname in STREAM */
 LISPSYM(fasl,"$FASL",system) /* slotname in STREAM */
+LISPSYM(datum,"$DATUM",system) /* slotname in PATHNAME */
 LISPSYM(default_pathname_defaults,"*DEFAULT-PATHNAME-DEFAULTS*",lisp) /* variable in PATHNAME */
 LISPSYM(merge_pathnames_ansi,"*MERGE-PATHNAMES-ANSI*",custom) /* variable in PATHNAME */
 LISPSYM(print_pathnames_ansi,"*PRINT-PATHNAMES-ANSI*",custom) /* variable in IO */
@@ -1569,9 +1583,7 @@ LISPSYM(Koverwrite,"OVERWRITE",keyword) /* argument in PATHNAME */
 LISPSYM(Kappend,"APPEND",keyword) /* argument in PATHNAME */
 LISPSYM(Ksupersede,"SUPERSEDE",keyword) /* argument in PATHNAME */
 LISPSYM(Kcreate,"CREATE",keyword) /* argument in PATHNAME */
-#if defined(DYNAMIC_FFI)
-LISPSYM(Kcopy,"COPY",keyword) /* SET-FOREIGN-POINTER */
-#endif
+LISPSYM(Kcopy,"COPY",keyword) /* SET-FOREIGN-POINTER & modules */
 LISPSYM(warn,"WARN",lisp) /* function in STREAM, PATHNAME */
 LISPSYM(Kignore,"IGNORE",keyword) /* argument in ENCODING, PATHNAME */
 LISPSYM(with_output_to_string,"WITH-OUTPUT-TO-STRING",lisp) /* error reporter in STREAM */
@@ -1582,7 +1594,7 @@ LISPSYM(reader_error,"READER-ERROR",lisp) /* type for IO */
 LISPSYM(read_base,"*READ-BASE*",lisp) /* IO variable */
 LISPSYM(read_suppress,"*READ-SUPPRESS*",lisp) /* IO variable */
 LISPSYM(read_eval,"*READ-EVAL*",lisp) /* IO variable */
-LISPSYM(readtablestern,"*READTABLE*",lisp) /* IO variable */
+LISPSYM(readtablestar,"*READTABLE*",lisp) /* IO variable */
 LISPSYM(features,"*FEATURES*",lisp) /* IO variable */
 LISPSYM(read_preserve_whitespace,"*READ-PRESERVE-WHITESPACE*",system) /* IO variable */
 LISPSYM(read_line_number,"*READ-LINE-NUMBER*",system) /* IO variable */
@@ -1598,6 +1610,8 @@ LISPSYM(make_init_form,"MAKE-INIT-FORM",clos) /* a function for io.d */
 LISPSYM(make_byte,"MAKE-BYTE",system) /* function for IO */
 LISPSYM(Kupcase,"UPCASE",keyword) /* *PRINT-CASE* - value in IO */
 LISPSYM(Kdowncase,"DOWNCASE",keyword) /* *PRINT-CASE* - value in IO */
+LISPSYM(Kpreserve,"PRESERVE",keyword) /* *PRINT-CASE* - value in IO */
+LISPSYM(Kinvert,"INVERT",keyword) /* *PRINT-CASE* - value in IO */
 LISPSYM(Kcapitalize,"CAPITALIZE",keyword) /* *PRINT-CASE* - value in IO */
                            /* Must be in the same order as in io.d! */
 LISPSYM(print_case,"*PRINT-CASE*",lisp) /* --------- IO variable -+ */
@@ -1668,14 +1682,15 @@ LISPSYM(source,"SOURCE",system) /* declaration-specifier in EVAL */
 LISPSYM(optimize,"OPTIMIZE",lisp) /* declaration-specifier in EVAL */
 LISPSYM(declaration,"DECLARATION",lisp) /* declaration-specifier in EVAL */
 LISPSYM(note_optimize,"NOTE-OPTIMIZE",system) /* function for CONTROL */
+LISPSYM(check_not_type,"CHECK-NOT-TYPE",system) /* function for CONTROL */
 LISPSYM(compile_lambda,"COMPILE-LAMBDA",system) /* function for EVAL */
 LISPSYM(expand_lambdabody_main,"%EXPAND-LAMBDABODY-MAIN",system) /* function for EVAL */
 LISPSYM(compile,"COMPILE",lisp) /* declaration-specifier and function for EVAL */
 #ifdef DEBUG_EVAL
 LISPSYM(funcall_trace_output,"*FUNCALL-TRACE-OUTPUT*",system) /* variable in EVAL */
 #endif
-LISPSYM(evalhookstern,"*EVALHOOK*",custom) /* variable in EVAL */
-LISPSYM(applyhookstern,"*APPLYHOOK*",custom) /* variable in EVAL */
+LISPSYM(evalhookstar,"*EVALHOOK*",custom)   /* variable in EVAL */
+LISPSYM(applyhookstar,"*APPLYHOOK*",custom) /* variable in EVAL */
 LISPSYM(macroexpand_hook,"*MACROEXPAND-HOOK*",lisp) /* variable in EVAL */
 LISPSYM(lambda_parameters_limit,"LAMBDA-PARAMETERS-LIMIT",lisp) /* constant in EVAL */
 LISPSYM(call_arguments_limit,"CALL-ARGUMENTS-LIMIT",lisp) /* constant in EVAL */
@@ -1772,7 +1787,7 @@ LISPSYM(typep,"TYPEP",lisp) /* function for PREDTYPE */
 LISPSYM(deftype_expander,"DEFTYPE-EXPANDER",system) /* property in PREDTYPE */
 LISPSYM(deftype_depth_limit,"*DEFTYPE-DEPTH-LIMIT*",custom) /* PREDTYPE variable */
 LISPSYM(coerce_fixnum_char_ansi,"*COERCE-FIXNUM-CHAR-ANSI*",custom) /* variable for PREDTYPE */
-LISPSYM(gc_statistics_stern,"*GC-STATISTICS*",system) /* variable for PREDTYPE */
+LISPSYM(gc_statistics_star,"*GC-STATISTICS*",system) /* variable for PREDTYPE */
 LISPSYM(recurse_count_gc_statistics,"*RECURSE-COUNT-GC-STATISTICS*",system) /* variable in PREDTYPE */
 LISPSYM(traced_definition,"TRACED-DEFINITION",system) /* property in SYMBOL */
 LISPSYM(gensym_counter,"*GENSYM-COUNTER*",lisp) /* variable in SYMBOL */
@@ -1820,7 +1835,7 @@ LISPSYM(long_float_negative_epsilon,"LONG-FLOAT-NEGATIVE-EPSILON",lisp) /* varia
 LISPSYM(default_float_format,"*DEFAULT-FLOAT-FORMAT*",custom) /* variable in LISPARIT */
 LISPSYM(read_default_float_format,"*READ-DEFAULT-FLOAT-FORMAT*",lisp) /* variable in LISPARIT */
 LISPSYM(write_float_decimal,"WRITE-FLOAT-DECIMAL",system) /* function for LISPARIT */
-LISPSYM(random_state_stern,"*RANDOM-STATE*",lisp) /* variable in LISPARIT */
+LISPSYM(random_state_star,"*RANDOM-STATE*",lisp) /* variable in LISPARIT */
 #ifdef UNICODE
 LISPSYM(base64,"BASE64",charset)
 LISPSYM(unicode_16,"UNICODE-16",charset)
@@ -1897,7 +1912,6 @@ LISPSYM(cp1254,"CP1254",charset)
 LISPSYM(cp1256,"CP1256",charset)
 LISPSYM(cp1257,"CP1257",charset)
 LISPSYM(hp_roman8,"HP-ROMAN8",charset) /*               | */
-LISPSYM(nextstep,"NEXTSTEP",charset) /*                 | */
 LISPSYM(jisx0201,"JIS_X0201",charset) /* ---------------+ */
 /* Aliases. */
 LISPSYM(ucs_2,"UCS-2",charset)
@@ -2017,6 +2031,7 @@ LISPSYM(wait_keypress,"WAIT-KEYPRESS",system) /* function for SPVW */
 #ifdef UNIX
 LISPSYM(disassemble_use_live_process,"*DISASSEMBLE-USE-LIVE-PROCESS*",system) /* variable in SPVW */
 #endif
+LISPSYM(disassemble_closures,"DISASSEMBLE-CLOSURES",system) /* function for DEBUG */
 /* ---------- FFI ---------- */
 #ifdef DYNAMIC_FFI
 /* LISPSYM(boolean,"BOOLEAN",ffi) */
