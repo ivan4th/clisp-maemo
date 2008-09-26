@@ -1,7 +1,7 @@
 /*
  * Package Management for CLISP
  * Bruno Haible 1990-2005
- * Sam Steingold 1999-2007
+ * Sam Steingold 1999-2008
  * German comments translated into English: Stefan Kain 2002-02-20
  */
 
@@ -344,7 +344,7 @@ local void symtab_delete (object sym, object symtab) {
     *entryptr = Cdr(entry); /* replace entry with Cdr(entry) */
   }
   /* finally decrement the symbol-counter by 1: (decf count) */
-  Symtab_count(symtab) = fixnum_inc(Symtab_count(symtab),-1);
+  { Symtab_count(symtab) = fixnum_inc(Symtab_count(symtab),-1); }
   return;
  notfound:
   pushSTACK(unbound); /* PACKAGE-ERROR slot PACKAGE */
@@ -627,13 +627,13 @@ global object find_package (object string) {
     pack = Car(packlistr); /* Package to be tested */
     /* test name: */
     if (string_eq(string,ThePackage(pack)->pack_name))
-      goto found;
+      return pack;
     { /* test nickname: */
       /* traverse nickname-list */
       var object nicknamelistr = ThePackage(pack)->pack_nicknames;
       while (consp(nicknamelistr)) {
         if (string_eq(string,Car(nicknamelistr)))
-          goto found;
+          return pack;
         nicknamelistr = Cdr(nicknamelistr);
       }
     }
@@ -641,8 +641,6 @@ global object find_package (object string) {
   }
   /* not found */
   return NIL;
- found: /* found */
-  return pack;
 }
 
 /* UP: Searches a symbol of given printname in a package.
@@ -1192,20 +1190,19 @@ global maygc void export (const gcv_object_t* sym_, const gcv_object_t* pack_) {
     /* symbol sym is not present in package pack */
     import_it = true;
     /* Search, if it is at least accessible: */
-    if (inherited_find(sym,pack))
-      goto found;
-    /* symbol sym is not even accessible in the package pack ==>
-       raise correctable error: */
-    pushSTACK(NIL); /* place for OPTIONS */
-    pushSTACK(pack); /* PACKAGE-ERROR slot PACKAGE */
-    /* "symbol ~S has to be imported in ~S before being exported" */
-    pushSTACK(pack); pushSTACK(sym); pushSTACK(S(export));
-    STACK_4 = CLOTEXT("((IMPORT \"import the symbol first\" . T)"
-                      " (IGNORE \"do nothing, do not export the symbol\" . NIL))");
-    correctable_error(package_error,GETTEXT("~S: Symbol ~S should be imported into ~S before being exported."));
-    if (nullp(value1)) /* NIL-option selected? */
-      return; /* yes -> do not export, finished */
-   found: ;
+    if (!inherited_find(sym,pack)) {
+      /* symbol sym is not even accessible in the package pack ==>
+         raise correctable error: */
+      pushSTACK(NIL); /* place for OPTIONS */
+      pushSTACK(pack); /* PACKAGE-ERROR slot PACKAGE */
+      /* "symbol ~S has to be imported in ~S before being exported" */
+      pushSTACK(pack); pushSTACK(sym); pushSTACK(S(export));
+      STACK_4 = CLOTEXT("((IMPORT \"import the symbol first\" . T)"
+                        " (IGNORE \"do nothing, do not export the symbol\" . NIL))");
+      correctable_error(package_error,GETTEXT("~S: Symbol ~S should be imported into ~S before being exported."));
+      if (nullp(value1)) /* NIL-option selected? */
+        return; /* yes -> do not export, finished */
+    }
   }
   /* Test for name-conflict: */
   pushSTACK(NIL); /* conflict-resolver:=NIL */
@@ -1565,7 +1562,7 @@ local maygc void use_package_aux (void* data, object sym) {
   }
   pushSTACK(string); /* save string */
   /* build new conflict: */
-  pushSTACK(NIL); /* new conflict (still empty) */
+  { pushSTACK(NIL); } /* new conflict (still empty) */
   { /* test, if a symbol of the same name is already accessible in pack: */
     var object othersym;
     var sintBWL code = find_symbol(string,false,*(localptr STACKop 2),&othersym);
@@ -1703,12 +1700,12 @@ local maygc void unuse_package (object packlist, object pack) {
  < result: current package
  can trigger GC */
 global maygc object get_current_package (void) {
-  var object pack = Symbol_value(S(packagestern)); /* value of *PACKAGE* */
+  var object pack = Symbol_value(S(packagestar)); /* value of *PACKAGE* */
   if (packagep(pack) && !pack_deletedp(pack)) {
     return pack;
   } else {
     var object newpack = /* reset *PACKAGE* */
-      Symbol_value(S(packagestern)) = O(default_package);
+      Symbol_value(S(packagestar)) = O(default_package);
     /* get_current_package() is often called by the reader,
        so we need to save and restore the read buffers */
     pushSTACK(O(token_buff_1)); O(token_buff_1) = NIL;
@@ -1727,7 +1724,7 @@ global maygc object get_current_package (void) {
     funcall(L(cerror_of_type),9);
     O(token_buff_2) = popSTACK(); /* restore read buffers */
     O(token_buff_1) = popSTACK();
-    return Symbol_value(S(packagestern));
+    return Symbol_value(S(packagestar));
   }
 }
 
@@ -2008,11 +2005,11 @@ LISPFUNN(set_package_lock,2) {
    being modified from a non-home package.
    See compiler.lisp:set-check-lock.
    can trigger GC */
-#define SYM_VAL_LOCK(symbol,pack)                                         \
-  (!nullp(pack) && !eq(pack,Symbol_value(S(packagestern))) /* non-home */ \
-   && special_var_p(TheSymbol(symbol))  /* special */                     \
-   && !externalp(symbol,pack) /* for IN-PACKAGE forms */                  \
-   && !accessiblep(symbol,Symbol_value(S(packagestern)))) /* accessible */
+#define SYM_VAL_LOCK(symbol,pack)                                       \
+  (!nullp(pack) && !eq(pack,Symbol_value(S(packagestar))) /* non-home */ \
+   && special_var_p(TheSymbol(symbol))  /* special */                   \
+   && !externalp(symbol,pack) /* for IN-PACKAGE forms */                \
+   && !accessiblep(symbol,Symbol_value(S(packagestar)))) /* accessible */
 global maygc void symbol_value_check_lock (object caller, object symbol) {
   var object pack = Symbol_package(symbol);
   if (SYM_VAL_LOCK(symbol,pack))
@@ -2079,10 +2076,10 @@ local maygc void test_intern_args (void) {
  < result : corresponding keyword */
 local object intern_result (uintBWL code) {
   switch (code) {
-    case 0: return NIL;           /* 0 -> NIL */
-    case 1: return S(Kexternal);  /* 1 -> :EXTERNAL */
-    case 2: return S(Kinherited); /* 2 -> :INHERITED */
-    case 3: return S(Kinternal);  /* 3 -> :INTERNAL */
+    case 0: { return NIL; }           /* 0 -> NIL */
+    case 1: { return S(Kexternal); }  /* 1 -> :EXTERNAL */
+    case 2: { return S(Kinherited); } /* 2 -> :INHERITED */
+    case 3: { return S(Kinternal); }  /* 3 -> :INTERNAL */
     default: NOTREACHED;
   }
 }
@@ -2561,7 +2558,17 @@ LISPFUNN(delete_package,1) {
  can trigger GC */
 local maygc void delete_package_aux (void* data, object sym) {
   var gcv_object_t* localptr = (gcv_object_t*)data; /* pointer to pack */
-  pushSTACK(sym); unintern(&STACK_0,localptr); skipSTACK(1);
+  pushSTACK(sym); unintern(&STACK_0,localptr); 
+#if defined(MULTITHREAD)
+  /* clear per thread symvalues if any.
+     NB: The symvalue cell pointed from clisp_thread_t will 
+     remain as memory leak !!!
+     It is possible with exhaustive scan of all symbols to "compact"
+     the threads symvalues cells. TBD.
+  */
+  clear_per_thread_symvalues(STACK_0);
+#endif
+  skipSTACK(1);
 }
 
 /* (FIND-ALL-SYMBOLS name) and its case-inverted variant */
