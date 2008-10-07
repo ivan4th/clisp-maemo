@@ -1,6 +1,6 @@
 /*
  * Garbage collection with weak references in CLISP
- * Bruno Haible 2004-2005
+ * Bruno Haible 2004-2008
  */
 
 /* An array that contains the addresses of those objects whose mark bit is
@@ -93,8 +93,8 @@ local void markwatch_enqueue (markwatch_t* entry) {
    that are held in memory only through weak mappings. */
 #define gc_mark gc_mark_with_watchset
 #define MARK(obj)  \
-  { mark(obj);                                                  \
-    markwatch_enqueue(markwatchset_lookup(canon((aint)(obj)))); \
+  { mark(obj);                                           \
+    markwatch_enqueue(markwatchset_lookup((aint)(obj))); \
   }
 #include "spvw_gcmark.c"
 #undef MARK
@@ -155,7 +155,7 @@ local inline void add_watchable (markwatch_t** accumulatorp, object obj, uintL i
   /* NB: For ptr = unbound, nothing is done, because unbound is gcinvariant. */
   if (!gcinvariant_object_p(ptr))
     if (!marked(ThePointer(ptr))) {
-      (*accumulatorp)->address = canonaddr(ptr);
+      (*accumulatorp)->address = (aint)ThePointer(ptr);
       (*accumulatorp)->weakobj = obj;
       (*accumulatorp)->weakindex = index;
       (*accumulatorp)->q_next = NULL;
@@ -1039,7 +1039,7 @@ global void activate_weak (object obj) {
       var uintM new_markwatchset_allocated = markwatchset_allocated + markwatchset_allocated/2;
       if (new_markwatchset_allocated < new_markwatchset_size)
         new_markwatchset_allocated = new_markwatchset_size;
-      var markwatch_t* new_markwatchset = (markwatch_t*)my_malloc(new_markwatchset_allocated*sizeof(markwatch_t));
+      var markwatch_t* new_markwatchset = (markwatch_t*)clisp_malloc(new_markwatchset_allocated*sizeof(markwatch_t));
       /* Now that malloc() succeeded, we can free the old markwatchset and
          update the variables. */
       var markwatch_t* old_markwatchset = markwatchset;
