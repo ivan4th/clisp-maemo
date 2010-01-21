@@ -163,6 +163,8 @@ CL_DOUBLE_DIV0
 CL_DOUBLE_OVERFLOW
 CL_DOUBLE_UNDERFLOW
 CL_DOUBLE_INEXACT
+dnl DEFS SHELL_OVERRIDE
+CL_SHELL_OVERRIDE
 dnl builds intparam.h
 CL_MACHINE([integer types and behaviour],
 ${srcdir}/intparam.c,[CL_INTPARAM_CROSS],intparam.h,cl_cv_file_intparam_h)

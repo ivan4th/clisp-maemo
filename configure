@@ -87,6 +87,7 @@ options: The following options are recognized:
                         (needed on HP-UX and OpenBSD)
   --edit-config         edit config.lisp with ${EDITOR:-vi} before make
                         (useful with --cbc)
+  --with-shell=SHELL    use SHELL as the system shell
 System types:
   --build=BUILD     configure for building on BUILD [guessed]
   --host=HOST       cross-compile to build programs to run on HOST [BUILD]

@@ -589,7 +589,11 @@ extern_C unsigned int sleep (unsigned int seconds); /* SLEEP(3V) */
 /* used by MISC */
 
 /* program call: */
+#ifdef SHELL_OVERRIDE
+#define SHELL SHELL_OVERRIDE
+#else
 #define SHELL "/bin/sh"  /* the name of the shell command interpreter */
+#endif
 extern_C int pipe (int fd[2]); /* PIPE(2V) */
 #ifdef HAVE_VFORK_H
   #include <vfork.h>
