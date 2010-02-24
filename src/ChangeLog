@@ -1,3 +1,7 @@
+2010-02-28  Ivan Shvedunov  <ivan4th@gmail.com>
+
+	* src/ariarm.d: support APCS-32/EABI calling conventions on ARM.
+
 2010-02-27  Vladimir Tzankov  <vtzankov@gmail.com>
 
 	* spvw_garcol.d (gar_col_normal) [MULTITHREAD]: mark active threads
