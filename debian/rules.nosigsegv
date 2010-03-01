@@ -1,0 +1,155 @@
+#!/usr/bin/make -f
+# Sample debian/rules that uses debhelper.
+# GNU copyright 1997 by Joey Hess.
+#
+# This version is for a hypothetical package that builds an
+# architecture-dependant package, as well as an architecture-independent
+# package.
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+
+MAKEMAKE_FLAGS:=$(if $(findstring debug,$(DEB_BUILD_OPTIONS)),debug,)
+tmp:=`pwd`/debian/tmp
+XLIBS_PRE_DEPENDS=
+
+DEB_BUILD_ARCH := $(shell dpkg-architecture -qDEB_BUILD_ARCH)
+DEB_HOST_ARCH := $(shell dpkg-architecture -qDEB_HOST_ARCH)
+
+EXTRACFLAGS=-falign-functions=4
+
+export CC=$(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)-gcc
+
+ifneq (,$(filter m68k alpha hppa ,$(DEB_BUILD_ARCH)))
+	export CFLAGS=-D SAFETY=3 -D NO_MULTIMAP_SHM -D NO_MULTIMAP_FILE -D NO_SINGLEMAP -D NO_TRIVIALMAP $(EXTRACFLAGS)
+endif
+
+ifneq (,$(filter ia64 ,$(DEB_BUILD_ARCH)))
+	export CFLAGS=-D NO_MULTIMAP_SHM -D NO_MULTIMAP_FILE -D NO_SINGLEMAP -D NO_TRIVIALMAP $(EXTRACFLAGS)
+endif
+
+ifneq (,$(filter sparc ,$(DEB_BUILD_ARCH)))
+	export CFLAGS=-mcpu=v9 -D SAFETY=3 -D NO_MULTIMAP_SHM -D NO_MULTIMAP_FILE -D NO_SINGLEMAP -D NO_TRIVIALMAP $(EXTRACFLAGS)
+endif
+
+ifneq (,$(filter arm hppa ia64 m68k s390 mipsel ,$(DEB_BUILD_ARCH)))
+        # Disable FFI
+	FFI=--without-dynamic-ffi
+	MODULES=--with-module=clx/mit-clx
+else
+        # Enable FFI on all other platforms
+	FFI=--with-dynamic-ffi --with-dynamic-modules
+        # These modules require FFI
+	MODULES=--with-module=bindings/glibc --with-module=clx/new-clx
+	XLIBS_PRE_DEPENDS=xlibs:PreDepends="libx11-6, libxext6, libxpm4"
+endif
+
+configure: configure-stamp
+configure-stamp: $(QUILT_STAMPFN)
+	dh_testdir
+	./configure debian/build --prefix=/usr --with-debug --ignore-absence-of-libsigsegv --with-shell=/bin/bash --fsstnd=debian $(FFI) \
+		$(MODULES)
+	cd debian/build && bash ./makemake --prefix=/usr --fsstnd=debian \
+		--with-readline --with-gettext $(FFI) $(MODULES) \
+		$(MAKEMAKE_FLAGS) > Makefile
+ifneq (,$(filter mipsel sparc ia64 ,$(DEB_BUILD_ARCH)))
+	sed 's/ -O2 / /' < debian/build/Makefile > debian/build/Makefile-new && \
+		mv debian/build/Makefile debian/build/Makefile-old && \
+		mv debian/build/Makefile-new debian/build/Makefile
+endif
+
+	touch configure-stamp
+
+build: build-stamp
+build-stamp: configure-stamp
+	dh_testdir
+	touch src/VERSION
+	$(MAKE) -C debian/build
+	#echo running  check-tests
+	#$(MAKE) -C debian/build check-tests || cat debian/build/tests/*.erg ; true
+	#$(MAKE) -C debian/build mod-check || true
+
+	touch build-stamp
+
+clean: 
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+
+	rm -rf debian/build
+	rm src/VERSION || true
+
+	chmod a+x configure src/lndir
+	find modules src utils -name configure -print0 | \
+	  xargs -0 chmod a+x
+
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_clean -k
+	dh_installdirs -A
+
+	mkdir -p $(tmp)/usr/share/doc $(tmp)/usr/share/man $(tmp)/usr/lib/common-lisp
+	$(MAKE) -C debian/build install DESTDIR=$(tmp)
+
+	# remove unwanted upstream doc/ files
+	rm $(tmp)/usr/share/doc/clisp/doc/clisp.1 \
+		$(tmp)/usr/share/doc/clisp/COPYRIGHT \
+		$(tmp)/usr/share/doc/clisp/GNU-GPL
+
+# Install CLC files
+	# install -o root -g root -m 0644 debian/install-clc.lisp \
+	# 	$(tmp)/usr/lib/clisp-2.48+
+
+	dh_install --sourcedir=debian/tmp
+	dh_link --package=clisp-dev usr/lib/clisp-2.48+/clisp-link usr/bin/clisp-link
+
+# Build architecture-independent files here.
+binary-indep: build install
+	dh_testdir  -i
+	dh_testroot  -i
+	dh_installdocs  -i
+	dh_installexamples  -i
+	dh_installchangelogs -a -i src/ChangeLog -i
+#	dh_strip  -i
+	dh_link  -i
+	dh_compress  -i
+	dh_fixperms -i
+	dh_installdeb -i
+	dh_shlibdeps -i
+	dh_gencontrol -i
+	dh_md5sums  -i
+	dh_builddeb -i
+
+# Build architecture-dependent files here.
+binary-arch: build install
+	dh_testdir  -a
+	dh_testroot  -a
+	dh_installdocs  -a
+	dh_installexamples  -a
+	dh_installman  -a
+	dh_installchangelogs -a -i src/ChangeLog -a
+#	dh_lisp clisp -a
+#	dh_strip  -a
+	dh_link  -a
+	dh_compress  -a
+	dh_fixperms -a
+	dh_installdeb -a
+	dh_shlibdeps -a
+	echo $(XLIBS_PRE_DEPENDS) >>debian/clisp.substvars
+
+#	(cd debian/clisp/usr/lib/clisp-2.48+/base/ && mv lispinit.mem \
+#                                         lispinit-orig.mem )
+
+#	add FAS file format version to substvars
+	debian/clisp/usr/bin/clisp -Efile utf-8 -B debian/clisp/usr/lib/clisp-2.48+ -M debian/clisp/usr/lib/clisp-2.48+/base/lispinit.mem debian/fasl-version.lisp
+
+	dh_gencontrol -a
+	dh_md5sums  -a
+	dh_builddeb -a
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

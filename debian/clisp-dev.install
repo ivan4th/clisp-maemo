@@ -1,0 +1,7 @@
+usr/lib/clisp-2.48+/linkkit
+usr/lib/clisp-2.48+/base/*.a
+usr/lib/clisp-2.48+/base/*.h
+usr/lib/clisp-2.48+/base/makevars
+usr/lib/clisp-2.48+/base/*.a
+usr/lib/clisp-2.48+/base/*.h
+usr/lib/clisp-2.48+/base/makevars

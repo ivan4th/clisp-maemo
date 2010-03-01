@@ -1,0 +1,3 @@
+shlibs:Depends=libc6 (>= 2.5.0-1), libffcall1, libgcc1 (>= 1:4.2.1), libncurses5 (>= 5.7-1), libreadline5 (>= 5.2), libsigsegv0
+xlibs:PreDepends=libx11-6, libxext6, libxpm4
+clisp:fasl-version=clisp-fasl-loader-20080430

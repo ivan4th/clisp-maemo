@@ -1,0 +1,8 @@
+usr/bin/clisp
+usr/lib/clisp-2.48+/data
+usr/lib/clisp-2.48+/base/lispinit.mem
+usr/lib/clisp-2.48+/base/lisp.run
+usr/lib/clisp-2.48+/base/*.o
+usr/lib/common-lisp
+usr/share/man/man1/clisp.1
+usr/share/locale

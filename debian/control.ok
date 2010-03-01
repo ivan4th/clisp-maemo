@@ -1,0 +1,79 @@
+Source: clisp
+Section: lisp
+Priority: optional
+Maintainer: Debian Common Lisp Team <pkg-common-lisp-devel@lists.alioth.debian.org>
+Uploaders: Peter Van Eynde <pvaneynd@debian.org>, Luca Capello <luca@pca.it>
+Build-Depends: debhelper (>> 5), gettext, bison, libncurses5-dev, groff, libx11-dev, libxext-dev, libxpm-dev, libsigsegv-dev (>= 2.4), libreadline5-dev, libffcall1-dev
+Build-Conflicts: libsigsegv-dev (>= 2.7)
+Standards-Version: 3.8.3
+Homepage: http://www.clisp.org/
+Vcs-Git: http://git.debian.org/git/pkg-common-lisp/clisp.git
+Vcs-Browser: http://git.debian.org/?p=pkg-common-lisp/clisp.git;a=summary
+
+Package: clisp
+Architecture: alpha amd64 arm armel hppa i386 ia64 mips mipsel powerpc kfreebsd-i386 m68k hurd-i386 s390
+Pre-Depends: ${xlibs:PreDepends}
+Depends: ${shlibs:Depends}
+Provides: lisp-compiler, ${clisp:fasl-version}
+Suggests: gdb, clisp-doc, clisp-dev, slime
+Description: GNU CLISP, a Common Lisp implementation
+ ANSI Common Lisp is a high-level, general-purpose programming language.
+ GNU CLISP is a Common Lisp implementation by Bruno Haible of Karlsruhe
+ University and Michael Stoll of Munich University, both in Germany.
+ It mostly supports the Lisp described in the ANSI Common Lisp standard.
+ It runs on most Unix workstations (GNU/Linux, FreeBSD, NetBSD, OpenBSD,
+ Solaris, Tru64, HP-UX, BeOS, NeXTstep, IRIX, AIX and others) and on
+ other systems (Windows NT/2000/XP, Windows 95/98/ME) and needs only
+ 4 MB of RAM.
+ .
+ It is Free Software and may be distributed under the terms of GNU GPL,
+ while it is possible to distribute commercial proprietary applications
+ compiled with GNU CLISP.
+ .
+ The user interface comes in English, German, French, Spanish, Dutch,
+ Russian and Danish, and can be changed at run time.
+ GNU CLISP includes an interpreter, a compiler, a debugger, CLOS, MOP,
+ a foreign language interface, sockets, i18n, fast bignums and more.
+ An X11 interface is available through CLX, Garnet, CLUE/CLIO.
+ GNU CLISP runs Maxima, ACL2 and many other Common Lisp packages.
+
+Package: clisp-dev
+Section: devel
+Architecture: alpha amd64 arm armel hppa i386 ia64 mips mipsel powerpc kfreebsd-i386 m68k hurd-i386
+Depends: clisp, libc6-dev, debhelper (>> 5), gettext, bison, libncurses5-dev, groff, libx11-dev, libxext-dev, libxpm-dev, libsigsegv-dev (>= 2.4-1), libreadline5-dev, libffcall1-dev
+Replaces: clisp (<< 1:2.33.1)
+Conflicts: clisp (<< 1:2.33.1)
+Description: GNU CLISP, a Common Lisp implementation (development files)
+ This is the link kit of clisp, it can be used to add external modules (written
+ for example in C) to the implementation. The module can define new
+ variables, symbols and functions for use in clisp. Examples include
+ database interfaces or widget libraries. Normal users do not need
+ this.
+ .
+ See also http://clisp.cons.org/impnotes.html#modules
+ .
+ ANSI Common Lisp is a high-level, general-purpose programming language.
+ GNU CLISP is a Common Lisp implementation by Bruno Haible of Karlsruhe
+ University and Michael Stoll of Munich University, both in Germany.
+ It mostly supports the Lisp described in the ANSI Common Lisp standard.
+ It runs on most Unix workstations (GNU/Linux, FreeBSD, NetBSD, OpenBSD,
+ Solaris, Tru64, HP-UX, BeOS, NeXTstep, IRIX, AIX and others) and on
+ other systems (Windows NT/2000/XP, Windows 95/98/ME) and needs only
+ 4 MB of RAM.
+
+Package: clisp-doc
+Section: doc
+Architecture: all
+Replaces: clisp (<< 1:2.27-0.1)
+Conflicts: clisp (<< 1:2.27-0.1)
+Description: GNU CLISP, a Common Lisp implementation (documentation)
+ This is the documentation for clisp.
+ .
+ ANSI Common Lisp is a high-level, general-purpose programming language.
+ GNU CLISP is a Common Lisp implementation by Bruno Haible of Karlsruhe
+ University and Michael Stoll of Munich University, both in Germany.
+ It mostly supports the Lisp described in the ANSI Common Lisp standard.
+ It runs on most Unix workstations (GNU/Linux, FreeBSD, NetBSD, OpenBSD,
+ Solaris, Tru64, HP-UX, BeOS, NeXTstep, IRIX, AIX and others) and on
+ other systems (Windows NT/2000/XP, Windows 95/98/ME) and needs only
+ 4 MB of RAM.
