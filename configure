@@ -610,8 +610,8 @@ if test -n "$do_config"; then
     export CC
   fi
   if test -z "$INPLACE"; then
-    # Create the po subdirectory and fill it
-    for f in po; do
+    # Create the po and build-aux subdirectories and fill them
+    for f in po build-aux; do
       if [ -d src/$f ] ; then
         mkdir -p "${ABS_DIRNAME}/${f}";
         ( cd src

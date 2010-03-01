@@ -1,3 +1,7 @@
+2010-03-01  Ivan Shvedunov  <ivan4th@gmail.com>
+
+	* configure: copy build-aux/ to the build directory if it's specified.
+
 2010-02-28  Ivan Shvedunov  <ivan4th@gmail.com>
 
 	* src/ariarm.d: support APCS-32/EABI calling conventions on ARM.
